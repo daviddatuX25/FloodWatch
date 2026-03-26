@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>FloodWatch — IoT Flash Flood Early Warning System</title>
+  <style>
+    :root {
+      --blue: #1e40af;
+      --blue-light: #3b82f6;
+      --blue-pale: #eff6ff;
+      --yellow: #d97706;
+      --orange: #ea580c;
+      --red: #dc2626;
+      --green: #16a34a;
+      --gray: #6b7280;
+      --border: #e5e7eb;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #f8fafc;
+      color: #1e293b;
+      line-height: 1.6;
+    }
+
+    /* HERO */
+    .hero {
+      background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 60%, #1e40af 100%);
+      color: white;
+      padding: 56px 32px 48px;
+      text-align: center;
+    }
+    .hero .badge {
+      display: inline-block;
+      background: rgba(59,130,246,0.3);
+      border: 1px solid rgba(255,255,255,0.2);
+      padding: 4px 14px;
+      border-radius: 999px;
+      font-size: 12px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      margin-bottom: 20px;
+    }
+    .hero h1 { font-size: clamp(2rem, 5vw, 3.2rem); font-weight: 800; letter-spacing: -1px; }
+    .hero h1 span { color: #60a5fa; }
+    .hero .subtitle {
+      font-size: 1.1rem; color: #94a3b8; margin-top: 10px;
+      max-width: 520px; margin-left: auto; margin-right: auto;
+    }
+    .meta {
+      display: flex; flex-wrap: wrap; gap: 16px; justify-content: center;
+      margin-top: 28px; font-size: 13px; color: #cbd5e1;
+    }
+
+    /* LAYOUT */
+    .container { max-width: 1000px; margin: 0 auto; padding: 40px 20px 80px; }
+    section { margin-bottom: 52px; }
+    .section-title {
+      font-size: 11px; font-weight: 700; letter-spacing: 2px;
+      text-transform: uppercase; color: var(--blue-light); margin-bottom: 8px;
+    }
+    h2 { font-size: 1.55rem; font-weight: 700; color: #0f172a; margin-bottom: 20px; }
+    h3 { font-size: 1rem; font-weight: 700; margin-bottom: 12px; color: #1e293b; }
+    p { color: #475569; margin-bottom: 12px; }
+
+    /* CARDS */
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-top: 8px; }
+    .card { background: white; border: 1px solid var(--border); border-radius: 12px; padding: 20px; transition: box-shadow .2s; }
+    .card:hover { box-shadow: 0 4px 20px rgba(0,0,0,.08); }
+    .card .icon { font-size: 24px; margin-bottom: 10px; }
+    .card h3 { font-size: .95rem; font-weight: 700; margin-bottom: 6px; }
+    .card p { font-size: .85rem; color: var(--gray); margin: 0; }
+
+    /* PIPELINE DIAGRAM */
+    .pipeline {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 8px;
+    }
+    .pipe-box {
+      background: white; border: 1px solid var(--border); border-radius: 12px; padding: 20px;
+    }
+    .pipe-box.field { border-top: 4px solid #f97316; }
+    .pipe-box.official { border-top: 4px solid var(--blue-light); }
+    .pipe-box h4 { font-size: .9rem; font-weight: 700; margin-bottom: 10px; }
+    .pipe-box .label-field { color: #f97316; }
+    .pipe-box .label-official { color: var(--blue-light); }
+    .pipe-box p { font-size: .83rem; color: var(--gray); margin: 0; }
+    .pipe-box ul { padding-left: 16px; margin-top: 8px; }
+    .pipe-box li { font-size: .83rem; color: var(--gray); margin-bottom: 4px; }
+
+    /* DIAGRAM */
+    .diagram {
+      background: #0f172a; color: #e2e8f0; border-radius: 12px;
+      padding: 28px; font-family: 'Courier New', monospace; font-size: 12.5px;
+      overflow-x: auto; white-space: pre; line-height: 1.5;
+    }
+
+    /* TABLES */
+    .table-wrap { overflow-x: auto; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 24px; }
+    table { width: 100%; border-collapse: collapse; background: white; }
+    thead { background: var(--blue-pale); }
+    th { text-align: left; padding: 12px 16px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--blue); }
+    td { padding: 11px 16px; font-size: 13.5px; border-top: 1px solid var(--border); color: #334155; }
+    tr:last-child td { font-weight: 700; color: #0f172a; background: #f8fafc; }
+    .free { color: var(--green); font-weight: 600; }
+    .new-row td { background: #f0fdf4; }
+    .new-row td:first-child::after { content: ' ✦'; color: var(--green); font-size: 10px; }
+
+    /* COST SUMMARY */
+    .cost-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 24px; }
+    .cost-card { background: white; border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; text-align: center; }
+    .cost-card .label { font-size: 11px; color: var(--gray); text-transform: uppercase; letter-spacing: 1px; }
+    .cost-card .amount { font-size: 1.6rem; font-weight: 800; color: var(--blue); margin-top: 4px; }
+    .cost-card.total { background: var(--blue); border-color: var(--blue); }
+    .cost-card.total .label { color: #bfdbfe; }
+    .cost-card.total .amount { color: white; }
+    .cost-card .diff { font-size: 11px; color: var(--green); margin-top: 2px; }
+
+    /* ALERT LEVELS */
+    .alerts { display: flex; flex-direction: column; gap: 12px; }
+    .alert-row {
+      display: flex; align-items: flex-start; gap: 14px;
+      background: white; border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px;
+    }
+    .alert-dot { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
+    .dot-yellow { background: #fbbf24; }
+    .dot-orange { background: #f97316; }
+    .dot-red    { background: #ef4444; }
+    .dot-blue   { background: #3b82f6; }
+    .alert-content { flex: 1; }
+    .alert-content strong { font-size: .9rem; display: block; margin-bottom: 4px; }
+    .alert-content p { font-size: .82rem; margin: 0 0 4px; color: var(--gray); }
+    .alert-signals { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+    .signal-tag {
+      font-size: 11px; padding: 2px 10px; border-radius: 999px; font-weight: 600;
+    }
+    .tag-field { background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; }
+    .tag-official { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+    .tag-gate { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+
+    /* BUZZER PATTERNS */
+    .patterns { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+    .pattern {
+      background: white; border: 1px solid var(--border); border-radius: 10px;
+      padding: 14px 16px; display: flex; align-items: center; gap: 12px;
+    }
+    .led-dot { width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0; }
+    .pattern p { font-size: .8rem; color: var(--gray); margin: 0; }
+    .pattern strong { font-size: .85rem; display: block; }
+
+    /* MEMBERS */
+    .members { display: flex; flex-wrap: wrap; gap: 12px; }
+    .member {
+      background: white; border: 1px solid var(--border); border-radius: 10px;
+      padding: 12px 18px; font-size: .9rem; font-weight: 600;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .member .avatar {
+      width: 32px; height: 32px; border-radius: 50%;
+      background: var(--blue-pale); color: var(--blue);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 800;
+    }
+
+    /* RISK */
+    .risks { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+    .risk {
+      background: white; border-left: 4px solid #fbbf24; border-radius: 0 10px 10px 0;
+      padding: 14px 16px;
+      border-top: 1px solid var(--border); border-right: 1px solid var(--border); border-bottom: 1px solid var(--border);
+    }
+    .risk strong { font-size: .88rem; display: block; margin-bottom: 4px; }
+    .risk p { font-size: .82rem; color: var(--gray); margin: 0; }
+
+    /* DEPLOYMENT */
+    .deploy-tiers { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .tier {
+      background: white; border: 1px solid var(--border); border-radius: 12px; padding: 20px;
+    }
+    .tier.local { border-top: 4px solid #16a34a; }
+    .tier.cloud { border-top: 4px solid var(--blue-light); }
+    .tier h4 { font-size: .9rem; font-weight: 700; margin-bottom: 8px; }
+    .tier .tier-label-local { color: #16a34a; }
+    .tier .tier-label-cloud { color: var(--blue-light); }
+    .tier ul { padding-left: 16px; }
+    .tier li { font-size: .83rem; color: var(--gray); margin-bottom: 4px; }
+    .tier .future-tag {
+      display: inline-block; font-size: 10px; background: #fef3c7;
+      color: #92400e; border: 1px solid #fde68a; border-radius: 999px;
+      padding: 1px 8px; margin-left: 6px; vertical-align: middle;
+    }
+
+    footer {
+      text-align: center; padding: 28px; font-size: 12px; color: var(--gray);
+      border-top: 1px solid var(--border); background: white;
+    }
+
+    @media (max-width: 600px) {
+      .hero { padding: 40px 20px 36px; }
+      .pipeline, .deploy-tiers { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="badge">IoT Proposal · Internet of Things</div>
+  <h1>Flood<span>Watch</span></h1>
+  <div class="subtitle">IoT-Based Flash Flood Early Warning System for Philippine Canal Waterways</div>
+  <div class="meta">
+    <span>📋 Submitted to: Mr. Zeus Mendoza</span>
+    <span>📅 Subject: Internet of Things</span>
+    <span>💰 Total Budget: ₱3,863</span>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- MEMBERS -->
+  <section>
+    <div class="section-title">Team</div>
+    <h2>Project Members</h2>
+    <div class="members">
+      <div class="member"><div class="avatar">DS</div> David Datu Sarmiento</div>
+      <div class="member"><div class="avatar">BJ</div> Brian Allan Jornales</div>
+      <div class="member"><div class="avatar">CL</div> Christine Lopez</div>
+      <div class="member"><div class="avatar">AW</div> Allyza Kaye Wong</div>
+      <div class="member"><div class="avatar">PH</div> Peter John Haboc</div>
+    </div>
+  </section>
+
+  <!-- OVERVIEW -->
+  <section>
+    <div class="section-title">Overview</div>
+    <h2>What is FloodWatch?</h2>
+    <p>FloodWatch is a real-time flash flood detection and early warning system deployed along canals and waterways. It uses a network of low-cost sensor nodes that communicate wirelessly via LoRa radio in a multi-hop relay chain — passing data to a base station that runs machine learning inference, syncs to the cloud, and sends SMS alerts.</p>
+    <p>The prototype demonstrates a minimum two-node deployment. All field nodes share identical hardware — role is defined by attached sensors and position in the network. Alerts reach two audiences: field maintenance crews on-site, and official responders (DRRMO/barangay) via SMS and dashboard.</p>
+
+    <div class="cards" style="margin-top:24px;">
+      <div class="card">
+        <div class="icon">📡</div>
+        <h3>Multi-hop LoRa Network</h3>
+        <p>Nodes relay data hop-by-hop — only one internet connection needed at the base station.</p>
+      </div>
+      <div class="card">
+        <div class="icon">🧠</div>
+        <h3>ML-Powered Surge Detection</h3>
+        <p>Edge Impulse model classifies normal flow vs. anomalous surge — smarter than simple thresholds.</p>
+      </div>
+      <div class="card">
+        <div class="icon">📱</div>
+        <h3>SMS + Web Alerts</h3>
+        <p>Automatic SMS to barangay officials and DRRMO, plus a live web dashboard with 3D canal simulation.</p>
+      </div>
+      <div class="card">
+        <div class="icon">🚧</div>
+        <h3>Canal Health Monitoring</h3>
+        <p>Detects blockages by correlating rising water level with dropping flow rate — alerts maintenance crews before a clog escalates into a flood.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- NETWORK TOPOLOGY -->
+  <section>
+    <div class="section-title">Network</div>
+    <h2>Network Topology</h2>
+    <div class="diagram">
++------------------+        +------------------+        +------------------+
+|   NODE A         |        |   NODE B         |        |   BASE STATION   |
+|  (full config)   |        |  (minimal)       |        |                  |
+|  Lolin32         |        |  Lolin32         | WiFi   |  Orange Pi Zero 3|
+|  Ra-02 LoRa      |        |  Ra-02 LoRa      +------->|  Edge Impulse ML |
+|  JSN-SR04T       +------->|  JSN-SR04T       |        |  Firebase        |
+|  YF-S201 flow    |        |  relay + forward |        |  SMS alerts      |
+|  KY-003 rain     |        |  buzzer + LED    |        |  Web dashboard   |
+|  solar + battery |        |  battery only    |   &lt;----+  LoRa downlink   |
+|  buzzer + LED    |        +--------^---------+        +------------------+
++------------------+                 |
+       ^                  dynamic LoRa meshing (LoRaMesher)
+       |                  two-way: data up, commands down
+       +------------------+--------------------+
+                          |                    |
+           +------------------+    +------------------+
+           |   NODE C (any)   |    |   NODE D...      |
+           |  Lolin32 + LoRa  |    |  Lolin32 + LoRa  |
+           |  sensors TBD     |    |  sensors TBD     |
+           |  buzzer + LED    |    |  buzzer + LED    |
+           +------------------+    +------------------+</div>
+  </section>
+
+  <!-- ALERT LEVELS -->
+  <section>
+    <div class="section-title">Alert System</div>
+    <h2>Alert Levels</h2>
+
+    <h3>Flood Alerts</h3>
+    <div class="alerts" style="margin-bottom: 28px;">
+      <div class="alert-row">
+        <div class="alert-dot dot-yellow"></div>
+        <div class="alert-content">
+          <strong>Yellow — Rise &gt; 5cm in 10 minutes</strong>
+          <p>Early warning. Water is rising faster than normal.</p>
+          <div class="alert-signals">
+            <span class="signal-tag tag-field">Short beep · Yellow LED</span>
+            <span class="signal-tag tag-official">SMS → tanod + DRRMO officer</span>
+          </div>
+        </div>
+      </div>
+      <div class="alert-row">
+        <div class="alert-dot dot-orange"></div>
+        <div class="alert-content">
+          <strong>Orange — Rise &gt; 15cm in 10 minutes</strong>
+          <p>Significant rise. Residents should prepare to evacuate.</p>
+          <div class="alert-signals">
+            <span class="signal-tag tag-field">Fast double beep · Orange LED</span>
+            <span class="signal-tag tag-official">SMS → barangay captain + resident list</span>
+          </div>
+        </div>
+      </div>
+      <div class="alert-row">
+        <div class="alert-dot dot-red"></div>
+        <div class="alert-content">
+          <strong>Red — Rise &gt; 30cm in 10 minutes AND water ≥ MDRRMO evacuation height</strong>
+          <p>Both conditions must be met. The MDRRMO absolute height gate prevents false Red alerts — rapid rise that stays well below official evacuation level will not trigger Red.</p>
+          <div class="alert-signals">
+            <span class="signal-tag tag-field">Continuous alarm · Red LED</span>
+            <span class="signal-tag tag-official">SMS all contacts + dashboard alarm</span>
+            <span class="signal-tag tag-gate">MDRRMO height gate required</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h3>Canal Clog Detection</h3>
+    <p style="font-size:.9rem;">Detected when water level rises while flow rate drops — indicating upstream blockage, not rainfall. A maintenance issue that can escalate into a flood if uncleared.</p>
+    <div class="alerts">
+      <div class="alert-row">
+        <div class="alert-dot dot-blue"></div>
+        <div class="alert-content">
+          <strong>Clog — Water rising + flow rate dropping (Node A only)</strong>
+          <p>Separate from flood alert levels. Does not imply evacuation. Correct response: send a maintenance crew to clear the blockage.</p>
+          <div class="alert-signals">
+            <span class="signal-tag tag-field">Slow triple beep · Blue LED</span>
+            <span class="signal-tag tag-official">SMS → maintenance immediately</span>
+            <span class="signal-tag tag-gate">Escalates to DRRMO if unresolved</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- HARDWARE TABLE -->
+  <section>
+    <div class="section-title">Hardware</div>
+    <h2>Node Configuration</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Role</th><th>Board</th><th>Sensors</th><th>Actuators</th><th>Power</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Full Node (A)</td>
+            <td>Lolin32 + Ra-02</td>
+            <td>JSN-SR04T, YF-S201, KY-003</td>
+            <td>Buzzer, LED (R/Y/B)</td>
+            <td>Solar + LiPo</td>
+          </tr>
+          <tr>
+            <td>Minimal Node (B)</td>
+            <td>Lolin32 + Ra-02</td>
+            <td>JSN-SR04T</td>
+            <td>Buzzer, LED (R/Y/B)</td>
+            <td>LiPo only</td>
+          </tr>
+          <tr>
+            <td>Extended (C, D…)</td>
+            <td>Lolin32 + Ra-02</td>
+            <td>Any subset</td>
+            <td>Buzzer, LED (R/Y/B)</td>
+            <td>Solar or battery</td>
+          </tr>
+          <tr>
+            <td>Base Station</td>
+            <td>Orange Pi Zero 3</td>
+            <td>—</td>
+            <td>—</td>
+            <td>Mains indoor</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="font-size:12px; color:#94a3b8;">All field nodes run identical firmware. Gateway role is assigned to whichever node is closest to the base station — no special hardware required.</p>
+  </section>
+
+  <!-- COSTING -->
+  <section>
+    <div class="section-title">Budget</div>
+    <h2>Bill of Materials & Costing</h2>
+
+    <div class="cost-summary">
+      <div class="cost-card">
+        <div class="label">Node A (Full)</div>
+        <div class="amount">₱1,970</div>
+      </div>
+      <div class="cost-card">
+        <div class="label">Node B (Minimal)</div>
+        <div class="amount">₱1,431</div>
+      </div>
+      <div class="cost-card">
+        <div class="label">Base Station</div>
+        <div class="amount">₱200</div>
+      </div>
+      <div class="cost-card">
+        <div class="label">Shared / One-time</div>
+        <div class="amount">₱322</div>
+      </div>
+      <div class="cost-card total">
+        <div class="label">Grand Total</div>
+        <div class="amount">₱3,923</div>
+      </div>
+    </div>
+
+    <h3>Node A — Full Configuration</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Component</th><th>Price</th></tr></thead>
+        <tbody>
+          <tr><td>Wemos Lolin32 v1</td><td>₱192</td></tr>
+          <tr><td>18650 2200mAh cell</td><td>₱165</td></tr>
+          <tr><td>18650 holder 4-slot</td><td>₱37</td></tr>
+          <tr><td>SX1278 Ra-02 LoRa 433MHz</td><td>₱305</td></tr>
+          <tr><td>12dBi antenna + SMA-uFL adapter</td><td>₱139</td></tr>
+          <tr><td>JSN-SR04T ultrasonic sensor</td><td>₱174</td></tr>
+          <tr><td>YF-S201 flow sensor</td><td>₱135</td></tr>
+          <tr><td>KY-003 hall sensor</td><td>₱20</td></tr>
+          <tr><td>6V 1W solar panel</td><td>₱249</td></tr>
+          <tr><td>2N2222A transistor</td><td>₱7</td></tr>
+          <tr><td>Dupont MF cables</td><td>₱37</td></tr>
+          <tr><td>PCB 5x7 universal board</td><td>₱55</td></tr>
+          <tr><td>Enclosure</td><td>₱175</td></tr>
+          <tr><td>Cable glands</td><td>₱30</td></tr>
+          <tr><td>JSN-SR04T mounting bracket</td><td>₱35</td></tr>
+          <tr><td>YF-S201 pipe fittings/tubing</td><td>₱75</td></tr>
+          <tr><td>Tipping bucket parts (DIY)</td><td>₱55</td></tr>
+          <tr><td>Active buzzer module (5V)</td><td>₱25</td></tr>
+          <tr><td>5mm LED — red, yellow, blue</td><td>₱20</td></tr>
+          <tr><td>Current-limiting resistors</td><td>₱5</td></tr>
+          <tr><td>JST-XH connector sets (4 ports)</td><td>₱20</td></tr>
+          <tr><td>4-position DIP switch</td><td>₱10</td></tr>
+          <tr><td><strong>Node A Total</strong></td><td><strong>₱1,970</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Node B — Minimal Configuration</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Component</th><th>Price</th></tr></thead>
+        <tbody>
+          <tr><td>Wemos Lolin32 v1</td><td>₱192</td></tr>
+          <tr><td>18650 2200mAh cell</td><td>₱165</td></tr>
+          <tr><td>18650 holder 4-slot</td><td>₱37</td></tr>
+          <tr><td>SX1278 Ra-02 LoRa 433MHz</td><td>₱305</td></tr>
+          <tr><td>12dBi antenna + SMA-uFL adapter</td><td>₱139</td></tr>
+          <tr><td>JSN-SR04T ultrasonic sensor</td><td>₱174</td></tr>
+          <tr><td>2N2222A transistor</td><td>₱7</td></tr>
+          <tr><td>Dupont MF cables</td><td>₱37</td></tr>
+          <tr><td>PCB 5x7 universal board</td><td>₱55</td></tr>
+          <tr><td>Enclosure</td><td>₱175</td></tr>
+          <tr><td>Cable glands</td><td>₱30</td></tr>
+          <tr><td>JSN-SR04T mounting bracket</td><td>₱35</td></tr>
+          <tr><td>Active buzzer module (5V)</td><td>₱25</td></tr>
+          <tr><td>5mm LED — red, yellow, blue</td><td>₱20</td></tr>
+          <tr><td>Current-limiting resistors</td><td>₱5</td></tr>
+          <tr><td>JST-XH connector sets (4 ports)</td><td>₱20</td></tr>
+          <tr><td>4-position DIP switch</td><td>₱10</td></tr>
+          <tr><td><strong>Node B Total</strong></td><td><strong>₱1,431</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Base Station + Shared Costs</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Item</th><th>Price</th></tr></thead>
+        <tbody>
+          <tr><td>Orange Pi Zero 3</td><td class="free">₱0 (owned)</td></tr>
+          <tr><td>Enclosure (base station)</td><td>₱200</td></tr>
+          <tr><td>2N2222A 5pcs pack (shared)</td><td>₱35</td></tr>
+          <tr><td>Extra dupont bundle (shared)</td><td>₱37</td></tr>
+          <tr><td>Breadboard 400pt (dev only)</td><td>₱50</td></tr>
+          <tr><td>Shipping estimate</td><td>₱200</td></tr>
+          <tr><td><strong>Base + Shared Total</strong></td><td><strong>₱522</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="font-size:12px; color:#94a3b8; margin-top: -12px;">Enclosure, bracket, fitting, and tipping bucket costs are mid-range estimates.</p>
+  </section>
+
+  <!-- SOFTWARE -->
+  <section>
+    <div class="section-title">Software Stack</div>
+    <h2>Tools & Services</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Layer</th><th>Tool</th><th>Cost</th></tr></thead>
+        <tbody>
+          <tr><td>Firmware</td><td>Arduino IDE + LoRaMesher (two-way)</td><td class="free">Free</td></tr>
+          <tr><td>ML model</td><td>Edge Impulse (academic tier)</td><td class="free">Free</td></tr>
+          <tr><td>Backend</td><td>Firebase Realtime Database</td><td class="free">Free tier</td></tr>
+          <tr><td>Dashboard</td><td>Three.js + Chart.js</td><td class="free">Free</td></tr>
+          <tr><td>Hosting</td><td>Firebase Hosting or Vercel</td><td class="free">Free tier</td></tr>
+          <tr><td>SMS alerts</td><td>A7680C AT+CMGS</td><td class="free">Free</td></tr>
+          <tr><td>Data SIM</td><td>Prepaid load</td><td>~₱50/month</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- DEPLOYMENT -->
+  <section>
+    <div class="section-title">Deployment</div>
+    <h2>Deployment Tiers</h2>
+    <div class="deploy-tiers">
+      <div class="tier local">
+        <h4 class="tier-label-local">Local Tier — Prototype Scope</h4>
+        <ul>
+          <li>Runs on Orange Pi Zero 3 at base station</li>
+          <li>Local dashboard — works without internet</li>
+          <li>Accessible on-site by field team and barangay officials</li>
+          <li>Single station view</li>
+        </ul>
+      </div>
+      <div class="tier cloud">
+        <h4 class="tier-label-cloud">Cloud Tier <span class="future-tag">Future</span></h4>
+        <ul>
+          <li>Firebase-hosted multi-station dashboard</li>
+          <li>All base stations visible in one view</li>
+          <li>Access: MDRRMO + public (pending MDRRMO approval)</li>
+          <li>Public resident view per canal if authorized</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- RISKS -->
+  <section>
+    <div class="section-title">Risks</div>
+    <h2>Risk Assessment</h2>
+    <div class="risks">
+      <div class="risk">
+        <strong>LoRa signal blockage</strong>
+        <p>Site survey required; 433MHz penetrates obstacles better than higher bands.</p>
+      </div>
+      <div class="risk">
+        <strong>Solar shading</strong>
+        <p>Node B is battery-only; spare cells maintained by barangay for shaded sites.</p>
+      </div>
+      <div class="risk">
+        <strong>Node submersion</strong>
+        <p>Mount above flood height; IP65 enclosure used for all field nodes.</p>
+      </div>
+      <div class="risk">
+        <strong>WiFi unavailability</strong>
+        <p>A7680C 4G module planned as modular fallback for base station connectivity.</p>
+      </div>
+      <div class="risk">
+        <strong>LoRaMesher instability</strong>
+        <p>Pre-deployment routing tests; linear relay fallback in case mesh fails.</p>
+      </div>
+      <div class="risk">
+        <strong>ML false positives</strong>
+        <p>ML flags cross-checked with thresholds before any alert is issued.</p>
+      </div>
+      <div class="risk">
+        <strong>False Red alerts</strong>
+        <p>Red requires both rate-of-rise AND MDRRMO absolute height gate — dual condition eliminates most false alarms.</p>
+      </div>
+      <div class="risk">
+        <strong>Insufficient ML training data</strong>
+        <p>Threshold-only launch; ML activates after 2–4 weeks of labeled data.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCOPE -->
+  <section>
+    <div class="section-title">Scope</div>
+    <h2>Prototype Scope & Scalability</h2>
+    <p>The prototype validates the complete pipeline across <strong>two nodes</strong> — including dual-pipeline alert architecture, actuator control via LoRa downlink, clog detection, and MDRRMO-gated Red alerts.</p>
+    <p>Each additional node costs approximately <strong>₱886 bare minimum</strong> (includes buzzer + LED). Full waterway coverage requires a formal site survey to determine node spacing and count.</p>
+
+    <div class="cards" style="margin-top:20px;">
+      <div class="card">
+        <div class="icon">⚡</div>
+        <h3>Power Efficiency</h3>
+        <p>~15mA average draw at 30s intervals = 146 hours standalone. Buzzer and LEDs only draw during alert states — negligible on average power budget.</p>
+      </div>
+      <div class="card">
+        <div class="icon">🔧</div>
+        <h3>Hardware Modularity</h3>
+        <p>Any node can be upgraded with additional sensors without changing the base board or reflashing firmware.</p>
+      </div>
+      <div class="card">
+        <div class="icon">🔮</div>
+        <h3>Future Enhancements</h3>
+        <p>4G LTE fallback, PAGASA forecast API, mobile app, cloud multi-station view, public resident dashboard (pending MDRRMO approval).</p>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<footer>
+  FloodWatch — IoT-Based Flash Flood Early Warning System &nbsp;|&nbsp;
+  Submitted in partial fulfillment of requirements for Internet of Things &nbsp;|&nbsp;
+  Mr. Zeus Mendoza
+</footer>
+
+</body>
+</html>
