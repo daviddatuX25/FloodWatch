@@ -24,7 +24,7 @@ Each sensor gets its own standalone sketch on a single Lolin32. Goal: understand
 | Sensor | What to prove | Physical tinkering |
 |---|---|---|
 | JSN-SR04T (water level) | UART mode reads, stable distance at 20–600cm range | Mounting bracket angle, cable gland entry, IP67 seal test |
-| YF-S201 (flow) | Pulse counting via interrupt, L/min calculation | Inline pipe fittings, waterproof splice to dupont wires |
+| HB100 (Doppler radar) | ADC sampling of amplified IF output, FFT frequency extraction, velocity calculation | Mounting angle 30-45° over canal, LM358 op-amp circuit assembly, noise floor baseline |
 | KY-003 + tipping bucket (rain) | Magnet trigger counting, tip-to-mm calibration | DIY bucket mechanism, funnel, pivot, magnet placement |
 | Buzzer + LEDs (actuators) | Beep patterns (yellow/orange/red/clog), LED switching | Panel-mount LEDs in enclosure lid, buzzer positioning for audibility |
 
@@ -61,10 +61,10 @@ Final node assembly: PCB soldering (off breadboard), enclosure layout, cable gla
 | node_id | 1 byte | Unique per node (set via DIP switch) |
 | packet_type | 1 byte | 0x01 = sensor data, 0x02 = heartbeat |
 | water_level_cm | 2 bytes | JSN-SR04T reading (unsigned, cm) |
-| flow_rate | 2 bytes | YF-S201 reading (dL/min, 0 if no sensor) |
+| surface_velocity | 2 bytes | HB100 reading (mm/s, 0 if no sensor) |
 | rain_tips | 1 byte | Tip count since last packet (0 if no gauge) |
 | battery_mv | 2 bytes | Battery voltage in millivolts |
-| flags | 1 byte | Bit flags: has_flow, has_rain, low_battery |
+| flags | 1 byte | Bit flags: has_flow (HB100 velocity sensor present), has_rain, low_battery |
 
 Total: 10 bytes.
 
@@ -120,7 +120,7 @@ Standard pin map for all Lolin32 field nodes. Unused sensors simply aren't wired
 | Sensor | Lolin32 Pins | Notes |
 |---|---|---|
 | JSN-SR04T (UART mode) | TX→GPIO 16, RX→GPIO 17 | Hardware Serial2 |
-| YF-S201 (flow) | Signal→GPIO 27 | Interrupt-capable pin |
+| HB100 IF output (amplified) | Signal→GPIO 27 | ADC-capable pin (via LM358) |
 | KY-003 (rain tip) | Signal→GPIO 25 | Interrupt-capable pin |
 
 ### Actuators
@@ -160,8 +160,8 @@ Single codebase for all nodes. Behavior determined at runtime by auto-detecting 
 | Sensor | Detection Method |
 |---|---|
 | JSN-SR04T | Send UART ping on Serial2, check for echo response within timeout |
-| YF-S201 | Pull-up on GPIO 27 — steady HIGH = absent, signal variation = present |
-| KY-003 (rain) | Pull-up on GPIO 25 — same detection pattern |
+| HB100 | Read ADC on GPIO 27 for 100ms — if signal variance exceeds noise threshold, HB100 amplifier circuit is present and active |
+| KY-003 (rain) | Pull-up on GPIO 25 — same detection pattern as before |
 | Ra-02 LoRa | SPI read of version register (0x12 should return 0x12 for SX1278) |
 | Buzzer/LEDs | Always present — no detection needed |
 
@@ -211,7 +211,7 @@ loop()
 | `FloodWatch_Node.ino` | Main setup/loop, sleep/wake cycle |
 | `config.h` | Pin assignments, constants |
 | `detect.h/.cpp` | Auto-detect plugged sensors, read DIP switch, populate NodeConfig |
-| `sensors.h/.cpp` | Read JSN-SR04T, YF-S201, KY-003, battery ADC (skips absent sensors) |
+| `sensors.h/.cpp` | Read JSN-SR04T, HB100 (ADC + FFT), KY-003, battery ADC (skips absent sensors) |
 | `lora_comm.h/.cpp` | LoRaMesher init, send uplink, receive downlink |
 | `actuators.h/.cpp` | Buzzer patterns, LED states, map alert_state to output |
 | `power.h/.cpp` | Transistor switching, deep sleep entry/exit |
@@ -227,7 +227,7 @@ All sensor and power connections use JST-XH connectors. No soldered sensor wires
 | Connector | Used For | Why JST-XH |
 |---|---|---|
 | JST-XH 4-pin | JSN-SR04T (VCC, GND, TX, RX) | Keyed, snaps in, can't mis-plug |
-| JST-XH 3-pin | YF-S201 (VCC, GND, Signal) | Same family |
+| JST-XH 3-pin | HB100 amplified signal (VCC, GND, Signal) | Same family |
 | JST-XH 3-pin | KY-003 rain gauge (VCC, GND, Signal) | Same family |
 | JST-XH 2-pin | Solar panel (V+, GND) | Matches Lolin32's JST battery style |
 | Pin header 2x4 | Ra-02 LoRa module | Daughter-board with SMA connector, slides onto headers |
@@ -321,7 +321,7 @@ IP65 ABS box, approximately 150×100×70mm.
 
 - Antenna SMA feedthrough (side)
 - JSN-SR04T cable
-- YF-S201 cable (if present)
+- HB100 signal cable (if present)
 - KY-003 cable (if present)
 - Solar panel cable (if present)
 
@@ -332,7 +332,7 @@ All glands on bottom — water drips down, not into the box.
 | Concern | Solution |
 |---|---|
 | Water ingress | Cable glands bottom-only; IP65 enclosure; mesh vent for buzzer |
-| Sensor mounting | JSN-SR04T on bracket pointing down at water; YF-S201 inline in PVC pipe section |
+| Sensor mounting | JSN-SR04T on bracket pointing down at water; HB100 mounted at 30-45° angle above canal surface, aimed along flow direction |
 | Rain gauge | DIY tipping bucket on small mast/bracket above enclosure |
 | Antenna | SMA feedthrough on side, 12dBi antenna mounted vertically above box |
 | Repairability | Open lid → all JST-XH connectors accessible. Unplug, swap, re-plug |
@@ -355,10 +355,10 @@ Updated node totals (from v3 design):
 
 | Node | v3 Price | + Connectors | New Total |
 |---|---|---|---|
-| Node A (full) | ₱1,940 | +₱30 | ₱1,970 |
+| Node A (full) | ₱1,940 | +₱30 | ₱1,960 |
 | Node B (minimal) | ₱1,401 | +₱30 | ₱1,431 |
 
-Grand total: ₱1,970 + ₱1,431 + ₱200 (base station) + ₱322 (shared) = **₱3,923**
+Grand total: ₱1,960 + ₱1,431 + ₱200 (base station) + ₱322 (shared) = **₱3,913**
 
 ---
 

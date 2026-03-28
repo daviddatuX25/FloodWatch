@@ -256,7 +256,7 @@
       <div class="card">
         <div class="icon">🚧</div>
         <h3>Canal Health Monitoring</h3>
-        <p>Detects blockages by correlating rising water level with dropping flow rate — alerts maintenance crews before a clog escalates into a flood.</p>
+        <p>Detects blockages by correlating rising water level (JSN-SR04T) with dropping surface velocity (HB100 Doppler radar) — alerts maintenance crews before a clog escalates into a flood.</p>
       </div>
     </div>
   </section>
@@ -272,7 +272,7 @@
 |  Lolin32         |        |  Lolin32         | WiFi   |  Orange Pi Zero 3|
 |  Ra-02 LoRa      |        |  Ra-02 LoRa      +------->|  Edge Impulse ML |
 |  JSN-SR04T       +------->|  JSN-SR04T       |        |  Firebase        |
-|  YF-S201 flow    |        |  relay + forward |        |  SMS alerts      |
+|  HB100 Doppler   |        |  relay + forward |        |  SMS alerts      |
 |  KY-003 rain     |        |  buzzer + LED    |        |  Web dashboard   |
 |  solar + battery |        |  battery only    |   &lt;----+  LoRa downlink   |
 |  buzzer + LED    |        +--------^---------+        +------------------+
@@ -333,12 +333,12 @@
     </div>
 
     <h3>Canal Clog Detection</h3>
-    <p style="font-size:.9rem;">Detected when water level rises while flow rate drops — indicating upstream blockage, not rainfall. A maintenance issue that can escalate into a flood if uncleared.</p>
+    <p style="font-size:.9rem;">Clog detection triggers when water level (JSN-SR04T) rises while surface velocity (HB100) drops — indicating upstream blockage rather than rainfall-driven rise. A maintenance issue that can escalate into a flood if uncleared.</p>
     <div class="alerts">
       <div class="alert-row">
         <div class="alert-dot dot-blue"></div>
         <div class="alert-content">
-          <strong>Clog — Water rising + flow rate dropping (Node A only)</strong>
+          <strong>Clog — Water rising + surface velocity dropping (Node A only)</strong>
           <p>Separate from flood alert levels. Does not imply evacuation. Correct response: send a maintenance crew to clear the blockage.</p>
           <div class="alert-signals">
             <span class="signal-tag tag-field">Slow triple beep · Blue LED</span>
@@ -364,7 +364,7 @@
           <tr>
             <td>Full Node (A)</td>
             <td>Lolin32 + Ra-02</td>
-            <td>JSN-SR04T, YF-S201, KY-003</td>
+            <td>JSN-SR04T, HB100, KY-003</td>
             <td>Buzzer, LED (R/Y/B)</td>
             <td>Solar + LiPo</td>
           </tr>
@@ -403,11 +403,11 @@
     <div class="cost-summary">
       <div class="cost-card">
         <div class="label">Node A (Full)</div>
-        <div class="amount">₱1,970</div>
+        <div class="amount">₱1,960</div>
       </div>
       <div class="cost-card">
         <div class="label">Node B (Minimal)</div>
-        <div class="amount">₱1,431</div>
+        <div class="amount">₱1,421</div>
       </div>
       <div class="cost-card">
         <div class="label">Base Station</div>
@@ -419,7 +419,7 @@
       </div>
       <div class="cost-card total">
         <div class="label">Grand Total</div>
-        <div class="amount">₱3,923</div>
+        <div class="amount">₱3,913</div>
       </div>
     </div>
 
@@ -434,7 +434,8 @@
           <tr><td>SX1278 Ra-02 LoRa 433MHz</td><td>₱305</td></tr>
           <tr><td>12dBi antenna + SMA-uFL adapter</td><td>₱139</td></tr>
           <tr><td>JSN-SR04T ultrasonic sensor</td><td>₱174</td></tr>
-          <tr><td>YF-S201 flow sensor</td><td>₱135</td></tr>
+          <tr><td>HB100 microwave Doppler radar</td><td>₱150</td></tr>
+          <tr><td>LM358 op-amp + resistors/capacitors (HB100 amplifier circuit)</td><td>₱35</td></tr>
           <tr><td>KY-003 hall sensor</td><td>₱20</td></tr>
           <tr><td>6V 1W solar panel</td><td>₱249</td></tr>
           <tr><td>2N2222A transistor</td><td>₱7</td></tr>
@@ -443,14 +444,12 @@
           <tr><td>Enclosure</td><td>₱175</td></tr>
           <tr><td>Cable glands</td><td>₱30</td></tr>
           <tr><td>JSN-SR04T mounting bracket</td><td>₱35</td></tr>
-          <tr><td>YF-S201 pipe fittings/tubing</td><td>₱75</td></tr>
           <tr><td>Tipping bucket parts (DIY)</td><td>₱55</td></tr>
           <tr><td>Active buzzer module (5V)</td><td>₱25</td></tr>
           <tr><td>5mm LED — red, yellow, blue</td><td>₱20</td></tr>
           <tr><td>Current-limiting resistors</td><td>₱5</td></tr>
           <tr><td>JST-XH connector sets (4 ports)</td><td>₱20</td></tr>
-          <tr><td>4-position DIP switch</td><td>₱10</td></tr>
-          <tr><td><strong>Node A Total</strong></td><td><strong>₱1,970</strong></td></tr>
+          <tr><td><strong>Node A Total</strong></td><td><strong>₱1,960</strong></td></tr>
         </tbody>
       </table>
     </div>
@@ -476,8 +475,7 @@
           <tr><td>5mm LED — red, yellow, blue</td><td>₱20</td></tr>
           <tr><td>Current-limiting resistors</td><td>₱5</td></tr>
           <tr><td>JST-XH connector sets (4 ports)</td><td>₱20</td></tr>
-          <tr><td>4-position DIP switch</td><td>₱10</td></tr>
-          <tr><td><strong>Node B Total</strong></td><td><strong>₱1,431</strong></td></tr>
+          <tr><td><strong>Node B Total</strong></td><td><strong>₱1,421</strong></td></tr>
         </tbody>
       </table>
     </div>
@@ -509,6 +507,7 @@
         <thead><tr><th>Layer</th><th>Tool</th><th>Cost</th></tr></thead>
         <tbody>
           <tr><td>Firmware</td><td>Arduino IDE + LoRaMesher (two-way)</td><td class="free">Free</td></tr>
+          <tr><td>Simulation</td><td>Wokwi (ESP32 simulator)</td><td class="free">Free</td></tr>
           <tr><td>ML model</td><td>Edge Impulse (academic tier)</td><td class="free">Free</td></tr>
           <tr><td>Backend</td><td>Firebase Realtime Database</td><td class="free">Free tier</td></tr>
           <tr><td>Dashboard</td><td>Three.js + Chart.js</td><td class="free">Free</td></tr>

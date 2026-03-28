@@ -6,9 +6,9 @@
 
 **Architecture:** Layer-by-layer build. Test sketches validate each sensor/component in isolation (Tasks 1–7). Then the production firmware is composed from modules: config, detect, sensors, lora_comm, actuators, power (Tasks 8–14). Final integration test with two physical nodes (Task 15).
 
-**Tech Stack:** Arduino IDE, ESP32 board package, LoRaMesher library, RadioLib (SX1278 driver)
+**Tech Stack:** Arduino IDE, ESP32 board package, LoRaMesher library, RadioLib (SX1278 driver), Wokwi simulator (pre-hardware validation)
 
-**Adapted for embedded:** Traditional TDD doesn't apply to microcontroller firmware. "Testing" here means: upload sketch → verify via Serial Monitor output and physical observation. Each test sketch is a standalone `.ino` that proves one component works before it's composed into the production firmware.
+**Adapted for embedded:** Traditional TDD doesn't apply to microcontroller firmware. Testing is two-stage: first simulate in Wokwi to validate logic, Serial output, and GPIO behavior without hardware risk; then upload to physical board for final verification with real sensors. Components Wokwi cannot simulate (JSN-SR04T UART, HB100 microwave Doppler radar, KY-003, SX1278 LoRa, LoRaMesher) are stubbed or skipped in simulation and validated hardware-only.
 
 ---
 
@@ -19,8 +19,8 @@ firmware/
 ├── test_sketches/                    # Layer 1-2: standalone test sketches
 │   ├── test_jsn_sr04t/
 │   │   └── test_jsn_sr04t.ino        # Water level sensor validation
-│   ├── test_yf_s201/
-│   │   └── test_yf_s201.ino          # Flow sensor validation
+│   ├── test_hb100_velocity/
+│   │   └── test_hb100_velocity.ino   # HB100 Doppler radar surface velocity validation
 │   ├── test_ky003_rain/
 │   │   └── test_ky003_rain.ino       # Rain gauge validation
 │   ├── test_buzzer_leds/
@@ -38,7 +38,7 @@ firmware/
     ├── detect.h                      # Auto-detection function declarations
     ├── detect.cpp                    # Auto-detect plugged sensors, read DIP switch
     ├── sensors.h                     # Sensor reading declarations
-    ├── sensors.cpp                   # Read JSN-SR04T, YF-S201, KY-003, battery
+    ├── sensors.cpp                   # Read JSN-SR04T, HB100 (ADC+FFT), KY-003, battery
     ├── actuators.h                   # Actuator control declarations
     ├── actuators.cpp                 # Buzzer patterns, LED states
     ├── lora_comm.h                   # LoRa communication declarations
@@ -47,28 +47,42 @@ firmware/
     └── power.cpp                     # Transistor switching, deep sleep
 ```
 
+```
+wokwi/
+├── task04_buzzer_leds/
+│   ├── diagram.json                  # ESP32 + 3 LEDs + buzzer
+│   └── wokwi.toml
+├── task05_battery_adc/
+│   ├── diagram.json                  # ESP32 + potentiometer on GPIO 35
+│   └── wokwi.toml
+└── task14_main_firmware/
+    ├── diagram.json                  # ESP32 + LEDs + buzzer + pot + pushbuttons
+    └── wokwi.toml
+```
+
 ---
 
 ## Layer 1 — Individual Sensor Tinkering
 
 > **Parallel-friendly:** Tasks 1-4 can be split across two groups.
-> Group 1: Tasks 1 + 2 (water level + flow). Group 2: Tasks 3 + 4 (rain + actuators).
+> Group 1: Tasks 1 + 2 (water level + HB100 velocity). Group 2: Tasks 3 + 4 (rain gauge + actuators).
 > Task 5 (battery) is quick and can be done by either group.
 
 ### Task 1: JSN-SR04T Water Level Sensor Test
 
 **Files:**
+
 - Create: `firmware/test_sketches/test_jsn_sr04t/test_jsn_sr04t.ino`
 
 **What you need:** Lolin32, JSN-SR04T sensor, 4 dupont wires
 
 **Wiring:**
+
 - JSN-SR04T VCC → Lolin32 5V
 - JSN-SR04T GND → Lolin32 GND
 - JSN-SR04T TX → Lolin32 GPIO 16 (Serial2 RX)
 - JSN-SR04T RX → Lolin32 GPIO 17 (Serial2 TX)
-
-- [ ] **Step 1: Create the test sketch**
+- **Step 1: Create the test sketch**
 
 ```cpp
 // test_jsn_sr04t.ino
@@ -146,7 +160,18 @@ void loop() {
 }
 ```
 
-- [ ] **Step 2: Upload and verify**
+- **Step 2: Simulate in Wokwi (limited)**
+
+Wokwi does not support JSN-SR04T. To validate Serial output and loop logic:
+
+1. Comment out the `Serial2.write(0x55)` trigger and response-read block in `readDistanceCm()`
+2. Hardcode a return value: `return 150;`
+3. Run in Wokwi — verify Serial prints "Distance: 150 cm" every 500ms
+4. Restore original code before uploading to hardware
+
+UART protocol correctness requires the physical sensor.
+
+- **Step 3: Upload and verify**
 
 1. Open in Arduino IDE, select board "WEMOS LOLIN32", correct COM port
 2. Upload sketch
@@ -155,14 +180,14 @@ void loop() {
 5. Expected output: `Distance: XX cm` readings that change as you move the sensor
 6. Verify: readings are stable (not jumping wildly), match a ruler measurement within ~1cm
 
-- [ ] **Step 3: Physical mounting test**
+- **Step 3: Physical mounting test**
 
 1. Hold sensor at the angle you'd mount it (pointing straight down)
 2. Move a flat surface (book, board) underneath at different heights
 3. Note: does reading become unstable at shallow angles? Find the mounting sweet spot
 4. Test with water surface if possible (bucket, basin)
 
-- [ ] **Step 4: Commit**
+- **Step 4: Commit**
 
 ```bash
 git add firmware/test_sketches/test_jsn_sr04t/
@@ -171,92 +196,135 @@ git commit -m "test: add JSN-SR04T ultrasonic sensor UART test sketch"
 
 ---
 
-### Task 2: YF-S201 Flow Sensor Test
+### Task 2: HB100 Doppler Radar Surface Velocity Test
 
 **Files:**
-- Create: `firmware/test_sketches/test_yf_s201/test_yf_s201.ino`
 
-**What you need:** Lolin32, YF-S201 flow sensor, 3 dupont wires, water source + tubing
+- Create: `firmware/test_sketches/test_hb100_velocity/test_hb100_velocity.ino`
 
-**Wiring:**
-- YF-S201 Red → Lolin32 5V
-- YF-S201 Black → Lolin32 GND
-- YF-S201 Yellow (signal) → Lolin32 GPIO 27
+> **Library required:** arduinoFFT by Enrique Condes — install via Library Manager (search "arduinoFFT").
 
-- [ ] **Step 1: Create the test sketch**
+**What you need:** Lolin32, HB100 module, LM358 op-amp, resistors (100kΩ ×2, 10kΩ ×2), capacitors (10µF, 0.1µF), breadboard, 5V power, dupont wires
+
+**Wiring — HB100:**
+
+- HB100 VCC → Lolin32 5V
+- HB100 GND → Lolin32 GND
+- HB100 IF pin → LM358 input (pin 3)
+
+**Wiring — LM358 amplifier (non-inverting, gain ~660, low-pass filter):**
+
+- LM358 pin 8 (V+) → 5V
+- LM358 pin 4 (GND) → GND
+- LM358 pin 3 (+IN) → HB100 IF pin (with 0.1µF cap to GND to filter RF)
+- LM358 pin 2 (−IN) → junction of 100kΩ (to output) and 10kΩ (to GND)
+- LM358 pin 1 (OUT) → Lolin32 GPIO 27 (ADC)
+- 10µF bypass cap across 5V supply pins
+
+- **Step 1: Create the test sketch**
 
 ```cpp
-// test_yf_s201.ino
-// Validates YF-S201 hall-effect flow sensor via interrupt counting
-// Expected: prints flow rate in L/min and total liters every second
+// test_hb100_velocity.ino
+// Validates HB100 X-Band Doppler radar via ADC sampling + FFT
+// Expected: prints peak Doppler frequency, surface velocity, and FLOWING/STILL every second
+//
+// Mount angle matters: adjust MOUNT_ANGLE_RAD to match your physical installation.
+// 0.5236 rad = 30 degrees. cos(30) = 0.866.
 
-#define FLOW_PIN 27
+#include <arduinoFFT.h>
 
-volatile uint32_t pulseCount = 0;
+#define ADC_PIN          27
+#define SAMPLES          512      // FFT input size — must be power of 2
+#define SAMPLE_FREQ      1000.0   // Hz
+#define NOISE_FLOOR_HZ   5.0      // Ignore peaks below this — DC + low-freq noise
+#define STILL_THRESHOLD  0.05     // m/s — below this = STILL
+#define MOUNT_ANGLE_RAD  0.5236   // 30 degrees — adjust per physical installation
 
-void IRAM_ATTR flowPulseISR() {
-  pulseCount++;
-}
+double vReal[SAMPLES];
+double vImag[SAMPLES];
+ArduinoFFT<double> FFT = ArduinoFFT<double>(vReal, vImag, SAMPLES, SAMPLE_FREQ);
 
 void setup() {
   Serial.begin(115200);
-  pinMode(FLOW_PIN, INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(FLOW_PIN), flowPulseISR, RISING);
-
-  Serial.println("=== YF-S201 Flow Sensor Test ===");
-  Serial.println("Run water through the sensor.");
-  Serial.println("Readings every second...");
+  analogReadResolution(12);
+  analogSetAttenuation(ADC_11db);
+  pinMode(ADC_PIN, INPUT);
+  Serial.println("=== HB100 Doppler Radar Velocity Test ===");
+  Serial.println("Aim at water surface at 30 degrees along flow direction.");
   Serial.println();
 }
 
-float totalLiters = 0.0;
-unsigned long lastTime = 0;
-
 void loop() {
-  if (millis() - lastTime >= 1000) {
-    // Disable interrupts briefly to read and reset count
-    noInterrupts();
-    uint32_t count = pulseCount;
-    pulseCount = 0;
-    interrupts();
-
-    // YF-S201 calibration: ~7.5 pulses per second per L/min
-    // Flow rate (L/min) = pulses per second / 7.5
-    float flowRate = count / 7.5;
-    totalLiters += flowRate / 60.0;  // Add this second's volume
-
-    Serial.print("Pulses: ");
-    Serial.print(count);
-    Serial.print("  Flow: ");
-    Serial.print(flowRate, 2);
-    Serial.print(" L/min");
-    Serial.print("  Total: ");
-    Serial.print(totalLiters, 3);
-    Serial.println(" L");
-
-    lastTime = millis();
+  // Collect 512 samples at 1kHz using delayMicroseconds for consistent timing
+  for (int i = 0; i < SAMPLES; i++) {
+    vReal[i] = analogRead(ADC_PIN) - 2048.0;  // Center around zero
+    vImag[i] = 0.0;
+    delayMicroseconds(1000);  // 1ms = 1kHz sample rate
   }
+
+  FFT.windowing(FFTWindow::Hamming, FFTDirection::Forward);
+  FFT.compute(FFTDirection::Forward);
+  FFT.complexToMagnitude();
+
+  // Find peak frequency above noise floor (skip DC bin 0)
+  double peakHz = 0.0;
+  double peakMag = 0.0;
+  int startBin = (int)(NOISE_FLOOR_HZ * SAMPLES / SAMPLE_FREQ) + 1;
+  for (int i = startBin; i < SAMPLES / 2; i++) {
+    if (vReal[i] > peakMag) {
+      peakMag = vReal[i];
+      peakHz = (i * SAMPLE_FREQ) / SAMPLES;
+    }
+  }
+
+  // V = Fd / (72 * cos(theta))
+  // 72 Hz/(m/s) is the HB100 Doppler constant for direct radial motion
+  // Divide by cos(mount angle) to correct for angled mounting
+  float velocityMs = (float)(peakHz / 72.0 / cos(MOUNT_ANGLE_RAD));
+
+  Serial.print("Peak: ");
+  Serial.print(peakHz, 1);
+  Serial.print(" Hz  Velocity: ");
+  Serial.print(velocityMs, 3);
+  Serial.print(" m/s  ");
+  Serial.println(velocityMs >= STILL_THRESHOLD ? "FLOWING" : "STILL");
+
+  delay(1000);
 }
 ```
 
-- [ ] **Step 2: Upload and verify**
+- **Step 2: Simulate in Wokwi (limited)**
 
-1. Upload sketch, open Serial Monitor at 115200
-2. With no water flowing: should show `Pulses: 0  Flow: 0.00 L/min`
-3. Blow through the sensor (or run water): pulse count should increase
-4. Verify readings respond to flow changes
+Wokwi has no HB100 component. Use a potentiometer on GPIO 27 to produce varying ADC levels:
 
-- [ ] **Step 3: Calibration check**
+1. Wire a potentiometer to GPIO 27
+2. Run the sketch — verify FFT runs without crashing and output prints every second
+3. Varying the pot will not produce realistic Doppler peaks; real validation requires hardware over water
 
-1. Run a known volume of water (e.g., 1 liter measured with a bottle) through the sensor
-2. Compare the `Total` reading to the actual volume
-3. If off by more than 10%, note the correction factor for later
+- **Step 3: Upload and verify**
 
-- [ ] **Step 4: Commit**
+1. Assemble the LM358 amplifier circuit on breadboard
+2. Upload sketch, open Serial Monitor at 115200
+3. With no water / sensor facing a wall: should show near-zero Hz and STILL
+4. Wave hand slowly in front of sensor face: should show nonzero Hz and a velocity reading
+5. Aim at flowing water in a bucket or basin at 30° along flow: should show consistent nonzero reading and FLOWING
+
+If readings are noisy or erratic: check amplifier wiring, ensure good GND connection between HB100, LM358, and Lolin32.
+
+- **Step 4: Calibration note**
+
+The 72 Hz/(m/s) constant assumes direct radial (head-on) movement. At 30° mount angle, dividing by cos(30°) = 0.866 corrects for the angle. To validate against reality:
+
+1. Float a visible object down a known canal length (e.g., 5 m)
+2. Time how long it takes in seconds
+3. Velocity estimate = 5 / seconds
+4. Compare to sensor reading — if consistently off, note a correction factor to carry into `sensors.cpp`
+
+- **Step 5: Commit**
 
 ```bash
-git add firmware/test_sketches/test_yf_s201/
-git commit -m "test: add YF-S201 flow sensor interrupt test sketch"
+git add firmware/test_sketches/test_hb100_velocity/
+git commit -m "test: add HB100 Doppler radar ADC+FFT surface velocity test sketch"
 ```
 
 ---
@@ -264,16 +332,17 @@ git commit -m "test: add YF-S201 flow sensor interrupt test sketch"
 ### Task 3: KY-003 Rain Gauge Test
 
 **Files:**
+
 - Create: `firmware/test_sketches/test_ky003_rain/test_ky003_rain.ino`
 
 **What you need:** Lolin32, KY-003 hall sensor, small magnet, 3 dupont wires
 
 **Wiring:**
+
 - KY-003 VCC → Lolin32 3.3V
 - KY-003 GND → Lolin32 GND
 - KY-003 Signal → Lolin32 GPIO 25
-
-- [ ] **Step 1: Create the test sketch**
+- **Step 1: Create the test sketch**
 
 ```cpp
 // test_ky003_rain.ino
@@ -331,22 +400,32 @@ void loop() {
 }
 ```
 
-- [ ] **Step 2: Upload and verify**
+- **Step 2: Simulate in Wokwi (limited)**
+
+Use a pushbutton on GPIO 25 to proxy the KY-003 hall sensor:
+
+1. In Wokwi, add a pushbutton between GPIO 25 and GND
+2. Run the sketch — press to simulate bucket tips
+3. Verify tip count increments and debounce rejects rapid presses
+4. Tipping bucket mechanism test is hardware-only
+
+- **Step 3: Upload and verify**
 
 1. Upload sketch, open Serial Monitor at 115200
 2. Wave a magnet near the KY-003 sensor
 3. Each pass should increment the tip count by 1
 4. Verify debounce works: fast magnet swipes don't double-count
 
-- [ ] **Step 3: Tipping bucket mechanism test**
+- **Step 3: Tipping bucket mechanism test**
 
 If you've built the DIY tipping bucket:
+
 1. Mount KY-003 next to the pivot point, magnet on the bucket arm
 2. Pour measured water into the funnel
 3. Count tips vs expected for your bucket volume
 4. Adjust `MM_PER_TIP` if needed
 
-- [ ] **Step 4: Commit**
+- **Step 4: Commit**
 
 ```bash
 git add firmware/test_sketches/test_ky003_rain/
@@ -358,18 +437,19 @@ git commit -m "test: add KY-003 hall sensor rain gauge test sketch"
 ### Task 4: Buzzer + LED Actuator Test
 
 **Files:**
+
 - Create: `firmware/test_sketches/test_buzzer_leds/test_buzzer_leds.ino`
 
 **What you need:** Lolin32, active buzzer module, 2N2222A transistor, 1kΩ resistor, 3x 5mm LEDs (red, yellow, blue), 3x 220Ω resistors, breadboard
 
 **Wiring:**
+
 - Buzzer VCC → Lolin32 5V
 - Buzzer GND → 2N2222A collector. 2N2222A emitter → GND. 2N2222A base → 1kΩ → GPIO 32
 - LED Red anode → 220Ω → GPIO 33. Cathode → GND
 - LED Yellow anode → 220Ω → GPIO 12. Cathode → GND
 - LED Blue anode → 220Ω → GPIO 13. Cathode → GND
-
-- [ ] **Step 1: Create the test sketch**
+- **Step 1: Create the test sketch**
 
 ```cpp
 // test_buzzer_leds.ino
@@ -485,18 +565,28 @@ void loop() {
 }
 ```
 
-- [ ] **Step 2: Upload and verify**
+- **Step 2: Simulate in Wokwi (full)**
+
+This task is fully simulatable:
+
+1. Create Wokwi project: ESP32 + red LED (GPIO 33) + yellow LED (GPIO 12) + blue LED (GPIO 13) + buzzer (GPIO 32)
+2. Run the sketch — watch LEDs cycle through all 5 patterns automatically
+3. Verify: NORMAL = all off, YELLOW = yellow only, ORANGE = red + yellow, RED = red only, CLOG = blue only
+4. Verify timing: each pattern runs ~5 seconds with 2-second pause between
+5. Save `diagram.json` to `wokwi/task04_buzzer_leds/`
+
+- **Step 3: Upload and verify**
 
 1. Upload sketch, open Serial Monitor at 115200
 2. Watch and listen as it cycles through each pattern:
-   - NORMAL: silent, all LEDs off
-   - YELLOW: short beep repeating, yellow LED on
-   - ORANGE: fast double beep, red + yellow LEDs on
-   - RED: continuous tone, red LED on
-   - CLOG: slow triple beep, blue LED on
+  - NORMAL: silent, all LEDs off
+  - YELLOW: short beep repeating, yellow LED on
+  - ORANGE: fast double beep, red + yellow LEDs on
+  - RED: continuous tone, red LED on
+  - CLOG: slow triple beep, blue LED on
 3. Verify each pattern is distinguishable by sound alone (field crew won't be looking at LEDs)
 
-- [ ] **Step 3: Commit**
+- **Step 3: Commit**
 
 ```bash
 git add firmware/test_sketches/test_buzzer_leds/
@@ -508,15 +598,16 @@ git commit -m "test: add buzzer and LED alert pattern test sketch"
 ### Task 5: Battery ADC Test
 
 **Files:**
+
 - Create: `firmware/test_sketches/test_battery_adc/test_battery_adc.ino`
 
 **What you need:** Lolin32, 2x resistors for voltage divider (100kΩ + 100kΩ, or similar), 18650 battery in holder
 
 **Wiring:**
+
 - Battery positive → 100kΩ → GPIO 35 → 100kΩ → GND
 - (This halves the voltage so a 4.2V battery reads ~2.1V, safe for ESP32 ADC)
-
-- [ ] **Step 1: Create the test sketch**
+- **Step 1: Create the test sketch**
 
 ```cpp
 // test_battery_adc.ino
@@ -588,7 +679,17 @@ void loop() {
 }
 ```
 
-- [ ] **Step 2: Upload and verify**
+- **Step 2: Simulate in Wokwi (full)**
+
+Fully simulatable using a potentiometer:
+
+1. In Wokwi, add a potentiometer: wiper → GPIO 35, one end → 3.3V, other → GND
+2. Run the sketch — adjust the pot to simulate different voltage levels
+3. Verify: percentage calculates correctly, LOW BATTERY flag triggers below 3300 mV, CRITICAL below 3000 mV
+4. Verify 16-sample averaging produces stable readings
+5. Save `diagram.json` to `wokwi/task05_battery_adc/`
+
+- **Step 3: Upload and verify**
 
 1. Upload sketch, open Serial Monitor at 115200
 2. With USB power only (no battery): reading will be 0 or erratic — that's expected
@@ -596,7 +697,7 @@ void loop() {
 4. Compare reading against a multimeter on the battery terminals
 5. If readings are off by more than 100mV, adjust `DIVIDER_RATIO`
 
-- [ ] **Step 3: Commit**
+- **Step 3: Commit**
 
 ```bash
 git add firmware/test_sketches/test_battery_adc/
@@ -613,11 +714,13 @@ git commit -m "test: add battery voltage ADC test sketch"
 ### Task 6: LoRa Point-to-Point TX
 
 **Files:**
+
 - Create: `firmware/test_sketches/test_lora_tx/test_lora_tx.ino`
 
 **What you need:** Lolin32 #1, Ra-02 module, 12dBi antenna + SMA-uFL adapter, dupont wires
 
 **Wiring (same for TX and RX):**
+
 - Ra-02 VCC → Lolin32 3.3V
 - Ra-02 GND → Lolin32 GND
 - Ra-02 SCK → GPIO 18
@@ -629,11 +732,11 @@ git commit -m "test: add battery voltage ADC test sketch"
 
 **CRITICAL:** Always attach the antenna before powering the Ra-02. Transmitting without an antenna can damage the module.
 
-- [ ] **Step 1: Install RadioLib library**
+- **Step 1: Install RadioLib library**
 
 In Arduino IDE: Sketch → Include Library → Manage Libraries → search "RadioLib" → Install
 
-- [ ] **Step 2: Create the TX test sketch**
+- **Step 2: Create the TX test sketch**
 
 ```cpp
 // test_lora_tx.ino
@@ -700,14 +803,26 @@ void loop() {
 }
 ```
 
-- [ ] **Step 3: Upload to board #1**
+- **Step 2b: Simulate in Wokwi (stub only)**
+
+Wokwi does not support SX1278/Ra-02. To validate packet formatting and timing:
+
+1. Comment out `#include <RadioLib.h>` and all RadioLib calls
+2. Replace `radio.begin(...)` with `Serial.println("LoRa init stubbed");`
+3. Replace `radio.transmit(msg)` with `Serial.println(msg)`
+4. Run in Wokwi — verify packet numbering increments and 3-second interval is correct
+5. Restore original code before uploading to hardware
+
+RF communication requires physical boards.
+
+- **Step 3: Upload to board #1**
 
 1. Connect Lolin32 #1 (with Ra-02 + antenna attached)
 2. Upload sketch
 3. Open Serial Monitor — should print "Initializing LoRa... OK" then "Sending..." every 3s
 4. If init fails: double-check SPI wiring, especially NSS (GPIO 5) and RST (GPIO 14)
 
-- [ ] **Step 4: Commit**
+- **Step 4: Commit**
 
 ```bash
 git add firmware/test_sketches/test_lora_tx/
@@ -719,11 +834,12 @@ git commit -m "test: add LoRa point-to-point TX test sketch"
 ### Task 7: LoRa Point-to-Point RX
 
 **Files:**
+
 - Create: `firmware/test_sketches/test_lora_rx/test_lora_rx.ino`
 
 **What you need:** Lolin32 #2, Ra-02 module, 12dBi antenna, same wiring as Task 6
 
-- [ ] **Step 1: Create the RX test sketch**
+- **Step 1: Create the RX test sketch**
 
 ```cpp
 // test_lora_rx.ino
@@ -777,7 +893,15 @@ void loop() {
 }
 ```
 
-- [ ] **Step 2: Upload to board #2 and verify both boards**
+- **Step 1b: Simulate in Wokwi (stub only)**
+
+Same stub approach as Task 6:
+
+1. Comment out RadioLib and replace `radio.receive(...)` with a hardcoded test string
+2. Verify Serial output formatting for received packet, RSSI, and SNR display
+3. Restore original code before uploading to hardware
+
+- **Step 2: Upload to board #2 and verify both boards**
 
 1. Upload to Lolin32 #2 (with Ra-02 + antenna)
 2. Open Serial Monitor on both boards (use two Arduino IDE windows or two COM ports)
@@ -785,14 +909,14 @@ void loop() {
 4. Board #2 (RX) should print "Received: FloodWatch TX test #N" with RSSI/SNR values
 5. RSSI closer to 0 = stronger signal. Typical indoor: -30 to -80 dBm
 
-- [ ] **Step 3: Range test**
+- **Step 3: Range test**
 
 1. Move boards apart — different rooms, different floors
 2. Note RSSI at each distance
 3. Verify packets still arrive through walls (433MHz should penetrate well)
 4. Find the point where packets start dropping
 
-- [ ] **Step 4: Commit**
+- **Step 4: Commit**
 
 ```bash
 git add firmware/test_sketches/test_lora_rx/
@@ -806,9 +930,9 @@ git commit -m "test: add LoRa point-to-point RX test sketch"
 ### Task 8: config.h — Pin Definitions and Constants
 
 **Files:**
-- Create: `firmware/FloodWatch_Node/config.h`
 
-- [ ] **Step 1: Create config.h**
+- Create: `firmware/FloodWatch_Node/config.h`
+- **Step 1: Create config.h**
 
 ```cpp
 // config.h
@@ -834,8 +958,12 @@ git commit -m "test: add LoRa point-to-point RX test sketch"
 // ── Sensors ──────────────────────────────────────────────
 #define PIN_JSN_RX      16   // Serial2 RX (sensor TX)
 #define PIN_JSN_TX      17   // Serial2 TX (sensor RX)
-#define PIN_FLOW        27   // YF-S201 signal (interrupt)
+#define PIN_FLOW        27   // HB100 amplified IF output (ADC)
 #define PIN_RAIN        25   // KY-003 signal (interrupt)
+
+// ── HB100 Doppler constants ───────────────────────────────
+#define MOUNT_ANGLE_RAD              0.5236   // 30 degrees — adjust per physical installation
+#define VELOCITY_NOISE_THRESHOLD_HZ  5.0      // Ignore FFT peaks below this
 
 // ── Actuators ────────────────────────────────────────────
 #define PIN_BUZZER      32   // Via 2N2222A transistor
@@ -850,12 +978,6 @@ git commit -m "test: add LoRa point-to-point RX test sketch"
 #define BATT_CRITICAL_MV 3000
 #define BATT_FULL_MV    4200
 #define BATT_CHARGE_THRESHOLD_MV 4400  // Above this = solar is charging
-
-// ── DIP Switch (Node ID) ────────────────────────────────
-#define PIN_DIP_BIT0    21   // LSB
-#define PIN_DIP_BIT1    22
-#define PIN_DIP_BIT2    34   // Input-only, needs external pull-up
-#define PIN_DIP_BIT3    36   // Input-only, needs external pull-up
 
 // ── LoRa Radio Config ───────────────────────────────────
 #define LORA_FREQUENCY  433.0  // MHz
@@ -873,10 +995,10 @@ git commit -m "test: add LoRa point-to-point RX test sketch"
 
 // Uplink: node → base station (10 bytes)
 struct __attribute__((packed)) UplinkPacket {
-  uint8_t  node_id;          // From DIP switch
+  uint8_t  node_id;          // From chip ID (last byte of ESP32 MAC)
   uint8_t  packet_type;      // 0x01 = sensor, 0x02 = heartbeat
   uint16_t water_level_cm;   // JSN-SR04T reading
-  uint16_t flow_rate_dLmin;  // YF-S201 in deci-liters/min (0 if absent)
+  uint16_t surface_velocity_mmps;  // HB100 surface velocity in mm/s (0 if absent)
   uint8_t  rain_tips;        // Tips since last packet (0 if absent)
   uint16_t battery_mv;       // Battery voltage
   uint8_t  flags;            // Bit 0: has_flow, Bit 1: has_rain, Bit 2: low_battery
@@ -916,22 +1038,24 @@ struct NodeConfig {
 #endif // FLOODWATCH_CONFIG_H
 ```
 
-- [ ] **Step 2: Commit**
+- **Step 2: Commit**
 
 ```bash
 git add firmware/FloodWatch_Node/config.h
 git commit -m "feat: add config.h with pin definitions and packet format"
 ```
 
+> **Wokwi:** No standalone simulation for this task. Validated as part of Task 14 simulation.
+
 ---
 
-### Task 9: detect module — Auto-Detection and DIP Switch
+### Task 9: detect module — Auto-Detection and Chip ID
 
 **Files:**
+
 - Create: `firmware/FloodWatch_Node/detect.h`
 - Create: `firmware/FloodWatch_Node/detect.cpp`
-
-- [ ] **Step 1: Create detect.h**
+- **Step 1: Create detect.h**
 
 ```cpp
 // detect.h
@@ -940,7 +1064,7 @@ git commit -m "feat: add config.h with pin definitions and packet format"
 
 #include "config.h"
 
-// Reads DIP switch and probes sensors to populate NodeConfig.
+// Reads chip ID and probes sensors to populate NodeConfig.
 // Call once in setup() before initializing any other module.
 NodeConfig detectHardware();
 
@@ -950,30 +1074,16 @@ void printNodeConfig(const NodeConfig& cfg);
 #endif
 ```
 
-- [ ] **Step 2: Create detect.cpp**
+- **Step 2: Create detect.cpp**
 
 ```cpp
 // detect.cpp
 #include "detect.h"
 
-static uint8_t readDipSwitch() {
-  // GPIO 21, 22 have internal pull-ups enabled
-  // GPIO 34, 36 need external 10kΩ pull-ups on the PCB
-  pinMode(PIN_DIP_BIT0, INPUT_PULLUP);
-  pinMode(PIN_DIP_BIT1, INPUT_PULLUP);
-  pinMode(PIN_DIP_BIT2, INPUT);  // No internal pull-up on 34
-  pinMode(PIN_DIP_BIT3, INPUT);  // No internal pull-up on 36
-
-  delay(5);  // Let pins settle
-
-  // DIP switch ON = pulled to GND = reads LOW = bit is 1
-  uint8_t id = 0;
-  if (digitalRead(PIN_DIP_BIT0) == LOW) id |= 0x01;
-  if (digitalRead(PIN_DIP_BIT1) == LOW) id |= 0x02;
-  if (digitalRead(PIN_DIP_BIT2) == LOW) id |= 0x04;
-  if (digitalRead(PIN_DIP_BIT3) == LOW) id |= 0x08;
-
-  return id;
+static uint8_t readChipId() {
+  // Use the last byte of the ESP32's unique MAC address as node ID.
+  // Guaranteed unique per chip — no hardware or provisioning needed.
+  return (uint8_t)(ESP.getEfuseMac() & 0xFF);
 }
 
 static bool detectJsnSr04t() {
@@ -1007,19 +1117,25 @@ static bool detectJsnSr04t() {
 }
 
 static bool detectFlowSensor() {
-  // YF-S201: when present, the hall sensor output is either LOW or pulsing.
-  // When absent with pull-up, pin reads steady HIGH.
-  // Read 10 samples over 50ms — if ALL are HIGH, sensor is absent.
-  pinMode(PIN_FLOW, INPUT_PULLUP);
+  // HB100: when present and powered, the amplified IF output shows noise variance
+  // above the ADC noise floor. When absent, GPIO 27 floats near zero with minimal variance.
+  // Sample ADC for 100ms — if variance exceeds noise threshold, sensor is active.
+  analogReadResolution(12);
   delay(10);
 
-  int highCount = 0;
-  for (int i = 0; i < 10; i++) {
-    if (digitalRead(PIN_FLOW) == HIGH) highCount++;
+  int samples[20];
+  for (int i = 0; i < 20; i++) {
+    samples[i] = analogRead(PIN_FLOW);
     delay(5);
   }
 
-  return highCount < 10;  // At least one LOW = sensor is present
+  int minVal = samples[0], maxVal = samples[0];
+  for (int i = 1; i < 20; i++) {
+    if (samples[i] < minVal) minVal = samples[i];
+    if (samples[i] > maxVal) maxVal = samples[i];
+  }
+
+  return (maxVal - minVal) > 50;  // Variance > 50 ADC counts = amplifier circuit active
 }
 
 static bool detectRainSensor() {
@@ -1044,7 +1160,7 @@ static bool detectSolar(uint16_t batteryMv) {
 
 NodeConfig detectHardware() {
   NodeConfig cfg;
-  cfg.node_id  = readDipSwitch();
+  cfg.node_id  = readChipId();
   cfg.has_lora  = true;   // Verified later during LoRa init
   cfg.has_flow  = detectFlowSensor();
   cfg.has_rain  = detectRainSensor();
@@ -1082,7 +1198,7 @@ void printNodeConfig(const NodeConfig& cfg) {
 }
 ```
 
-- [ ] **Step 3: Create a minimal .ino to test detection**
+- **Step 3: Create a minimal .ino to test detection**
 
 Create a temporary `firmware/FloodWatch_Node/FloodWatch_Node.ino` with just detection:
 
@@ -1110,30 +1226,32 @@ void loop() {
 }
 ```
 
-- [ ] **Step 4: Upload and verify detection**
+- **Step 4: Upload and verify detection**
 
 1. Upload with NO sensors plugged in → all should show "not connected"
 2. Plug in JSN-SR04T → re-scan should detect it
-3. Plug in YF-S201 → should detect flow sensor
-4. Change DIP switch positions → node ID should change
+3. Connect HB100 amplifier circuit → should detect flow sensor (ADC variance check)
+4. Verify node ID printed to Serial matches last byte of the chip's MAC
 5. Verify detection is reliable (run 5+ scans, no false positives)
 
-- [ ] **Step 5: Commit**
+- **Step 5: Commit**
 
 ```bash
 git add firmware/FloodWatch_Node/config.h firmware/FloodWatch_Node/detect.h firmware/FloodWatch_Node/detect.cpp firmware/FloodWatch_Node/FloodWatch_Node.ino
-git commit -m "feat: add hardware auto-detection and DIP switch reading"
+git commit -m "feat: add hardware auto-detection and chip ID reading"
 ```
+
+> **Wokwi:** No standalone simulation for this task. Validated as part of Task 14 simulation.
 
 ---
 
 ### Task 10: sensors module
 
 **Files:**
+
 - Create: `firmware/FloodWatch_Node/sensors.h`
 - Create: `firmware/FloodWatch_Node/sensors.cpp`
-
-- [ ] **Step 1: Create sensors.h**
+- **Step 1: Create sensors.h**
 
 ```cpp
 // sensors.h
@@ -1156,18 +1274,11 @@ void sensorsResetCycle();
 #endif
 ```
 
-- [ ] **Step 2: Create sensors.cpp**
+- **Step 2: Create sensors.cpp**
 
 ```cpp
 // sensors.cpp
 #include "sensors.h"
-
-// ── Flow sensor interrupt ────────────────────────────────
-static volatile uint32_t _flowPulseCount = 0;
-
-static void IRAM_ATTR flowPulseISR() {
-  _flowPulseCount++;
-}
 
 // ── Rain gauge interrupt ─────────────────────────────────
 static volatile uint32_t _rainTipCount = 0;
@@ -1182,7 +1293,6 @@ static void IRAM_ATTR rainTipISR() {
 }
 
 // ── Tracking between reads ───────────────────────────────
-static uint32_t _lastFlowPulses = 0;
 static uint32_t _lastRainTips = 0;
 
 void sensorsInit(const NodeConfig& cfg) {
@@ -1190,8 +1300,9 @@ void sensorsInit(const NodeConfig& cfg) {
   Serial2.begin(9600, SERIAL_8N1, PIN_JSN_RX, PIN_JSN_TX);
 
   if (cfg.has_flow) {
-    pinMode(PIN_FLOW, INPUT_PULLUP);
-    attachInterrupt(digitalPinToInterrupt(PIN_FLOW), flowPulseISR, RISING);
+    // HB100: ADC input, no interrupt — sampled on demand via readSurfaceVelocityMmps()
+    analogSetAttenuation(ADC_11db);
+    pinMode(PIN_FLOW, INPUT);
   }
 
   if (cfg.has_rain) {
@@ -1232,22 +1343,39 @@ static uint16_t readWaterLevelCm() {
   return distanceMm / 10;
 }
 
-static uint16_t readFlowRateDlMin() {
-  // Get pulses since last read
-  noInterrupts();
-  uint32_t pulses = _flowPulseCount;
-  _flowPulseCount = 0;
-  interrupts();
+static uint16_t readSurfaceVelocityMmps() {
+  // Sample HB100 amplified IF output via ADC, apply FFT to extract dominant frequency.
+  // V = Fd / (72 * cos(MOUNT_ANGLE_RAD))
+  // Returns surface velocity in mm/s (multiply m/s by 1000).
+  const int SAMPLES = 512;
+  const float SAMPLE_FREQ = 1000.0;
+  double vReal[SAMPLES], vImag[SAMPLES];
 
-  uint32_t deltaPulses = pulses;
+  for (int i = 0; i < SAMPLES; i++) {
+    vReal[i] = analogRead(PIN_FLOW) - 2048.0;
+    vImag[i] = 0.0;
+    delayMicroseconds(1000);  // 1ms = 1kHz sample rate
+  }
 
-  // YF-S201: 7.5 pulses/sec per L/min
-  // Over 30 seconds: total pulses / 30 = pulses/sec
-  // pulses/sec / 7.5 = L/min
-  // Multiply by 10 for deci-liters/min (dL/min) to keep integer precision
-  // dL/min = (deltaPulses / 30.0 / 7.5) * 10.0
-  float lPerMin = deltaPulses / 30.0 / 7.5;
-  return (uint16_t)(lPerMin * 10);  // dL/min
+  ArduinoFFT<double> fft(vReal, vImag, SAMPLES, SAMPLE_FREQ);
+  fft.windowing(FFTWindow::Hamming, FFTDirection::Forward);
+  fft.compute(FFTDirection::Forward);
+  fft.complexToMagnitude();
+
+  // Find peak above noise floor (skip DC bin 0)
+  double peakHz = 0.0;
+  double peakMag = 0.0;
+  int startBin = (int)(VELOCITY_NOISE_THRESHOLD_HZ * SAMPLES / SAMPLE_FREQ) + 1;
+  for (int i = startBin; i < SAMPLES / 2; i++) {
+    if (vReal[i] > peakMag) {
+      peakMag = vReal[i];
+      peakHz = (i * SAMPLE_FREQ) / SAMPLES;
+    }
+  }
+
+  if (peakHz < VELOCITY_NOISE_THRESHOLD_HZ) return 0;
+  float velocityMs = (float)(peakHz / 72.0 / cos(MOUNT_ANGLE_RAD));
+  return (uint16_t)(velocityMs * 1000.0f);  // mm/s
 }
 
 static uint8_t readRainTips() {
@@ -1274,7 +1402,7 @@ UplinkPacket sensorsRead(const NodeConfig& cfg) {
   pkt.node_id        = cfg.node_id;
   pkt.packet_type    = PKT_TYPE_SENSOR;
   pkt.water_level_cm = readWaterLevelCm();
-  pkt.flow_rate_dLmin = cfg.has_flow ? readFlowRateDlMin() : 0;
+  pkt.surface_velocity_mmps = cfg.has_flow ? readSurfaceVelocityMmps() : 0;
   pkt.rain_tips      = cfg.has_rain ? readRainTips() : 0;
   pkt.battery_mv     = readBatteryMv();
 
@@ -1288,13 +1416,12 @@ UplinkPacket sensorsRead(const NodeConfig& cfg) {
 
 void sensorsResetCycle() {
   noInterrupts();
-  _flowPulseCount = 0;
   _rainTipCount = 0;
   interrupts();
 }
 ```
 
-- [ ] **Step 3: Update .ino to test sensor readings**
+- **Step 3: Update .ino to test sensor readings**
 
 Replace the temporary `FloodWatch_Node.ino`:
 
@@ -1324,7 +1451,7 @@ void loop() {
   Serial.println("--- Sensor Reading ---");
   Serial.print("  Node ID:     "); Serial.println(pkt.node_id);
   Serial.print("  Water level: "); Serial.print(pkt.water_level_cm); Serial.println(" cm");
-  Serial.print("  Flow rate:   "); Serial.print(pkt.flow_rate_dLmin / 10.0, 1); Serial.println(" L/min");
+  Serial.print("  Velocity:    "); Serial.print(pkt.surface_velocity_mmps / 1000.0, 3); Serial.println(" m/s");
   Serial.print("  Rain tips:   "); Serial.println(pkt.rain_tips);
   Serial.print("  Battery:     "); Serial.print(pkt.battery_mv); Serial.println(" mV");
   Serial.print("  Flags:       0x"); Serial.println(pkt.flags, HEX);
@@ -1334,29 +1461,31 @@ void loop() {
 }
 ```
 
-- [ ] **Step 4: Upload and verify**
+- **Step 4: Upload and verify**
 
 1. Upload with JSN-SR04T connected → water level should show valid cm reading
 2. If flow/rain sensors connected → those fields should populate
 3. Absent sensors should show 0 with flags unset
 4. Battery reading should be reasonable
 
-- [ ] **Step 5: Commit**
+- **Step 5: Commit**
 
 ```bash
 git add firmware/FloodWatch_Node/sensors.h firmware/FloodWatch_Node/sensors.cpp firmware/FloodWatch_Node/FloodWatch_Node.ino
 git commit -m "feat: add sensors module with water level, flow, rain, battery"
 ```
 
+> **Wokwi:** No standalone simulation for this task. Validated as part of Task 14 simulation.
+
 ---
 
 ### Task 11: actuators module
 
 **Files:**
+
 - Create: `firmware/FloodWatch_Node/actuators.h`
 - Create: `firmware/FloodWatch_Node/actuators.cpp`
-
-- [ ] **Step 1: Create actuators.h**
+- **Step 1: Create actuators.h**
 
 ```cpp
 // actuators.h
@@ -1385,7 +1514,7 @@ void actuatorsOff();
 #endif
 ```
 
-- [ ] **Step 2: Create actuators.cpp**
+- **Step 2: Create actuators.cpp**
 
 ```cpp
 // actuators.cpp
@@ -1482,7 +1611,7 @@ void actuatorsOff() {
 }
 ```
 
-- [ ] **Step 3: Test by adding to .ino**
+- **Step 3: Test by adding to .ino**
 
 Add actuator test to `FloodWatch_Node.ino` — cycle through states via Serial commands:
 
@@ -1541,31 +1670,34 @@ void loop() {
 }
 ```
 
-- [ ] **Step 4: Upload and verify**
+- **Step 4: Upload and verify**
 
 1. Upload, open Serial Monitor
 2. Type `0` through `4` to test each alert pattern
 3. Verify buzzer patterns match spec, LEDs light correct colors
 4. Verify `actuatorsUpdate()` is non-blocking (sensor readings still print)
 
-- [ ] **Step 5: Commit**
+- **Step 5: Commit**
 
 ```bash
 git add firmware/FloodWatch_Node/actuators.h firmware/FloodWatch_Node/actuators.cpp firmware/FloodWatch_Node/FloodWatch_Node.ino
 git commit -m "feat: add actuators module with non-blocking buzzer patterns"
 ```
 
+> **Wokwi:** No standalone simulation for this task. Actuator patterns are validated in Task 4 simulation and the full state machine in Task 14 simulation.
+
 ---
 
 ### Task 12: lora_comm module — LoRaMesher Integration
 
 **Files:**
+
 - Create: `firmware/FloodWatch_Node/lora_comm.h`
 - Create: `firmware/FloodWatch_Node/lora_comm.cpp`
 
-**Prerequisites:** Install LoRaMesher library in Arduino IDE. Check https://github.com/LoRaMesher/LoRaMesher for installation instructions and current API. The code below follows the documented API pattern — verify against the version you install.
+**Prerequisites:** Install LoRaMesher library in Arduino IDE. Check [https://github.com/LoRaMesher/LoRaMesher](https://github.com/LoRaMesher/LoRaMesher) for installation instructions and current API. The code below follows the documented API pattern — verify against the version you install.
 
-- [ ] **Step 1: Create lora_comm.h**
+- **Step 1: Create lora_comm.h**
 
 ```cpp
 // lora_comm.h
@@ -1592,7 +1724,7 @@ void loraUpdate();
 #endif
 ```
 
-- [ ] **Step 2: Create lora_comm.cpp**
+- **Step 2: Create lora_comm.cpp**
 
 ```cpp
 // lora_comm.cpp
@@ -1676,7 +1808,7 @@ void loraUpdate() {
 
 > **NOTE FOR THE TEAM:** The LoRaMesher API above is based on the library's documented examples. When you install the library, open its example sketches (`File → Examples → LoRaMesher`) and compare the init sequence. If the API differs from what's written here, update `lora_comm.cpp` to match. The key things to verify: `LoraMesherConfig` struct fields, `begin()` vs `init()` method names, and `createPacketAndSend()` parameters.
 
-- [ ] **Step 3: Test with two boards**
+- **Step 3: Test with two boards**
 
 Update `FloodWatch_Node.ino` to include LoRa:
 
@@ -1765,7 +1897,7 @@ void loop() {
 }
 ```
 
-- [ ] **Step 4: Upload to both boards and verify mesh**
+- **Step 4: Upload to both boards and verify mesh**
 
 1. Upload to both Lolin32 boards (both with Ra-02 + antenna)
 2. Both should show "LoRa mesh active" with different local addresses
@@ -1773,22 +1905,24 @@ void loop() {
 4. Open Serial Monitor on both — verify packets are being sent
 5. At this point, without a base station, you won't see received data, but LoRaMesher should log routing table updates
 
-- [ ] **Step 5: Commit**
+- **Step 5: Commit**
 
 ```bash
 git add firmware/FloodWatch_Node/lora_comm.h firmware/FloodWatch_Node/lora_comm.cpp firmware/FloodWatch_Node/FloodWatch_Node.ino
 git commit -m "feat: add LoRaMesher communication module"
 ```
 
+> **Wokwi:** LoRaMesher cannot be simulated. This module is validated hardware-only in Tasks 6–7 (point-to-point LoRa) and Task 15 (mesh integration).
+
 ---
 
 ### Task 13: power module — Deep Sleep and Transistor Switching
 
 **Files:**
+
 - Create: `firmware/FloodWatch_Node/power.h`
 - Create: `firmware/FloodWatch_Node/power.cpp`
-
-- [ ] **Step 1: Create power.h**
+- **Step 1: Create power.h**
 
 ```cpp
 // power.h
@@ -1816,7 +1950,7 @@ bool powerIsWakeFromSleep();
 #endif
 ```
 
-- [ ] **Step 2: Create power.cpp**
+- **Step 2: Create power.cpp**
 
 ```cpp
 // power.cpp
@@ -1863,21 +1997,23 @@ bool powerIsWakeFromSleep() {
 }
 ```
 
-- [ ] **Step 3: Commit**
+- **Step 3: Commit**
 
 ```bash
 git add firmware/FloodWatch_Node/power.h firmware/FloodWatch_Node/power.cpp
 git commit -m "feat: add power module with deep sleep and transistor switching"
 ```
 
+> **Wokwi:** Deep sleep timer wake and transistor switching (GPIO 4) can be tested in Wokwi. Use an LED on GPIO 4 as a proxy for the transistor gate. Validated fully as part of Task 14 simulation.
+
 ---
 
 ### Task 14: Main Firmware — FloodWatch_Node.ino (Final)
 
 **Files:**
-- Modify: `firmware/FloodWatch_Node/FloodWatch_Node.ino`
 
-- [ ] **Step 1: Write the final main sketch**
+- Modify: `firmware/FloodWatch_Node/FloodWatch_Node.ino`
+- **Step 1: Write the final main sketch**
 
 ```cpp
 // FloodWatch_Node.ino
@@ -1937,8 +2073,8 @@ void setup() {
   UplinkPacket pkt = sensorsRead(nodeCfg);
   Serial.print("[data] level=");
   Serial.print(pkt.water_level_cm);
-  Serial.print("cm flow=");
-  Serial.print(pkt.flow_rate_dLmin);
+  Serial.print("cm vel=");
+  Serial.print(pkt.surface_velocity_mmps);
   Serial.print(" rain=");
   Serial.print(pkt.rain_tips);
   Serial.print(" batt=");
@@ -2022,7 +2158,27 @@ void loop() {
 }
 ```
 
-- [ ] **Step 2: Upload and verify full cycle**
+- **Step 2: Simulate in Wokwi (composite)**
+
+Simulate the full wake cycle with stubs for unsupported components:
+
+1. Create Wokwi project: ESP32 + red LED (GPIO 33) + yellow LED (GPIO 12) + blue LED (GPIO 13) + buzzer (GPIO 32) + potentiometer (GPIO 35) + pushbutton for flow (GPIO 27) + pushbutton for rain (GPIO 25)
+2. Stub `lora_comm`:
+  - `loraInit()` → `return true`
+  - `loraSendUplink()` → `Serial.println("uplink sent (stubbed)")`
+  - `loraReceiveDownlink()` → return a hardcoded alert state after N cycles to test alert path
+3. Stub `detectJsnSr04t()` in `detect.cpp` → `return true` (always detected)
+4. Stub `readWaterLevelCm()` → `return 120`
+5. Run in Wokwi and verify:
+  - Boot prints correct node config and chip ID
+  - Sensor packet is formatted and "sent" each cycle
+  - Deep sleep triggers after no alert
+  - When stub returns an alert downlink: node stays awake, correct LED/buzzer pattern activates
+6. Save `diagram.json` to `wokwi/task14_main_firmware/`
+
+This catches state machine bugs (wrong pin, bad sleep logic, alert not clearing) before touching hardware.
+
+- **Step 3: Upload and verify full cycle**
 
 1. Upload to a Lolin32 with Ra-02 + JSN-SR04T connected
 2. Open Serial Monitor — should see detection, sensor reading, uplink sent
@@ -2030,14 +2186,15 @@ void loop() {
 4. After 30 seconds → should wake and repeat
 5. Verify power consumption: during sleep, current should drop to microamps (if you have a multimeter in series with battery)
 
-- [ ] **Step 3: Test alert override**
+- **Step 3: Test alert override**
 
 Without a base station sending real downlinks, test the alert-stays-awake behavior:
+
 1. Temporarily modify the code to simulate receiving an alert (hardcode `currentAlert = ALERT_YELLOW` after the RX window)
 2. Verify the node stays awake, runs the buzzer pattern, and continues reading sensors
 3. Remove the hardcoded alert, re-upload
 
-- [ ] **Step 4: Commit**
+- **Step 4: Commit**
 
 ```bash
 git add firmware/FloodWatch_Node/FloodWatch_Node.ino
@@ -2048,25 +2205,25 @@ git commit -m "feat: complete main firmware with sleep/wake cycle and alert over
 
 ### Task 15: Two-Node Integration Test
 
+> **Wokwi:** Not applicable. LoRa mesh communication requires two physical boards. All simulatable logic has been validated in prior tasks.
+
 **Files:** No new files — this is a verification task.
 
-**What you need:** Both Lolin32 boards fully wired (Ra-02 + antenna + JSN-SR04T minimum), DIP switches set to different IDs.
+**What you need:** Both Lolin32 boards fully wired (Ra-02 + antenna + JSN-SR04T minimum).
 
-- [ ] **Step 1: Set up Node A (DIP switch = 1)**
+- **Step 1: Set up Node A**
 
-1. Set DIP switch to `0001` (node ID 1)
-2. Connect JSN-SR04T + flow sensor + rain gauge (if available)
-3. Upload `FloodWatch_Node` firmware
-4. Open Serial Monitor — verify detection shows all connected sensors
+1. Connect JSN-SR04T + HB100 with LM358 amplifier circuit + rain gauge (if available)
+2. Upload `FloodWatch_Node` firmware
+3. Open Serial Monitor — verify node ID printed, detection shows all connected sensors
 
-- [ ] **Step 2: Set up Node B (DIP switch = 2)**
+- **Step 2: Set up Node B**
 
-1. Set DIP switch to `0010` (node ID 2)
-2. Connect JSN-SR04T only
-3. Upload same `FloodWatch_Node` firmware
-4. Open Serial Monitor — verify detection shows JSN-SR04T only, flow/rain absent
+1. Connect JSN-SR04T only
+2. Upload same `FloodWatch_Node` firmware
+3. Open Serial Monitor — verify node ID is different from Node A, detection shows JSN-SR04T only, flow/rain absent
 
-- [ ] **Step 3: Verify LoRa mesh communication**
+- **Step 3: Verify LoRa mesh communication**
 
 1. Power both nodes simultaneously
 2. Both should initialize LoRaMesher and show mesh addresses
@@ -2074,22 +2231,22 @@ git commit -m "feat: complete main firmware with sleep/wake cycle and alert over
 4. Both nodes should be sending uplink packets every 30 seconds
 5. Verify both nodes appear in each other's routing tables
 
-- [ ] **Step 4: Verify deep sleep cycle**
+- **Step 4: Verify deep sleep cycle**
 
 1. Watch both nodes cycle: wake → read → send → sleep → wake
 2. Verify the 30-second interval is consistent
 3. If you have a multimeter: measure current during sleep (should be ~10µA)
 
-- [ ] **Step 5: Document results**
+- **Step 5: Document results**
 
 Create a simple test log noting:
+
 - Node IDs detected correctly? (yes/no)
 - Sensors auto-detected correctly? (yes/no)
 - LoRa packets sent/received? (yes/no, RSSI values)
 - Deep sleep working? (yes/no, measured current if available)
 - Any issues encountered and how they were resolved
-
-- [ ] **Step 6: Commit test log**
+- **Step 6: Commit test log**
 
 ```bash
 git add docs/test-log-firmware.md

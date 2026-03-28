@@ -34,7 +34,7 @@ This dual-condition gate eliminates false Red alerts from rapid-but-safe water l
 
 ### 3. Clog Detection as Separate Category
 
-Clog (rising water + dropping flow rate) is a maintenance issue, not a flood alert. It uses a distinct alert category:
+Clog detection triggers when water level (JSN-SR04T) rises while surface velocity (HB100) drops — indicating upstream blockage rather than rainfall-driven rise. It is a maintenance issue, not a flood alert. It uses a distinct alert category:
 - Different buzzer pattern (slow triple beep) and LED color (blue)
 - SMS to maintenance immediately
 - Escalates to DRRMO if unresolved within configurable window
@@ -66,14 +66,18 @@ Power impact negligible — actuators only draw during alert states.
 | Local (prototype) | Single station, Orange Pi | On-site, no internet required |
 | Cloud (future) | Multi-station | MDRRMO + public if approved |
 
+### 7. Pre-Hardware Simulation
+
+Firmware is validated in Wokwi (free ESP32 simulator) before uploading to physical boards. Wokwi natively supports ESP32 GPIO, LEDs, buzzers, ADC, Serial Monitor, and deep sleep. Components without Wokwi support (JSN-SR04T UART, HB100 microwave Doppler radar, KY-003, SX1278 LoRa) are stubbed — pushbuttons proxy interrupt-based sensors, hardcoded values proxy UART sensors. LoRaMesher mesh routing cannot be simulated and is validated hardware-only.
+
 ## Updated BOM Summary
 
 | Item | v2 | v3 | v3 + connectors |
 |------|----|----|-----------------|
-| Node A | ₱1,890 | ₱1,940 | ₱1,970 |
-| Node B | ₱1,351 | ₱1,401 | ₱1,431 |
+| Node A | ₱1,890 | ₱1,940 | ₱1,960 |
+| Node B | ₱1,351 | ₱1,401 | ₱1,421 |
 | Base station | ₱200 | ₱200 | ₱200 |
 | Shared | ₱322 | ₱322 | ₱322 |
-| **Total** | **₱3,763** | **₱3,863** | **₱3,923** |
+| **Total** | **₱3,763** | **₱3,863** | **₱3,903** |
 
-Connector additions: JST-XH connector sets (₱20) + DIP switch (₱10) = ₱30 per node.
+Connector additions: JST-XH connector sets (₱20) per node.

@@ -45,7 +45,7 @@ FloodWatch addresses this by distributing low-cost sensor nodes across a waterwa
 |  Lolin32         |        |  Lolin32         |        |  Orange Pi Zero 3|
 |  Ra-02 LoRa      |        |  Ra-02 LoRa      | WiFi   |  Edge Impulse ML |
 |  JSN-SR04T       +------->|  JSN-SR04T       +------->|  Firebase        |
-|  YF-S201 flow    |        |  relay + forward |        |  SMS alerts      |
+|  HB100 Doppler   |        |  relay + forward |        |  SMS alerts      |
 |  KY-003 rain     |        |  battery only    |        |  Web dashboard   |
 |  solar + battery |        |                  |        |  indoors         |
 +------------------+        +--------^---------+        +------------------+
@@ -99,7 +99,7 @@ Nodes discover routes automatically — no fixed infrastructure needed.
 
 | Role | Board | Sensors | Power | Notes |
 |------|-------|---------|-------|-------|
-| Full node (A) | Lolin32 + Ra-02 | JSN-SR04T, YF-S201, KY-003 | Solar + LiPo | Primary sensing node |
+| Full node (A) | Lolin32 + Ra-02 | JSN-SR04T, HB100, KY-003 | Solar + LiPo | Primary sensing node |
 | Minimal node (B) | Lolin32 + Ra-02 | JSN-SR04T | LiPo only | Relay + level reading; shaded sites |
 | Extended (C, D…) | Lolin32 + Ra-02 | Any subset | Solar or battery | Plug into chain; same firmware |
 | Base station | Orange Pi Zero 3 | — | Mains indoor | ML, Firebase, SMS control |
@@ -125,8 +125,8 @@ Better obstacle penetration than higher bands. Hop range 1–3km in semi-open te
 ### JSN-SR04T Waterproof Ultrasonic Sensor
 IP67-rated, 20–600cm range, UART mode. Distance-based output enables rate-of-rise calculation — the primary early warning indicator.
 
-### YF-S201 Flow Sensor
-1–30L/min hall-effect inline meter. Drop in flow rate alongside rising water level indicates blockage, not rainfall.
+### HB100 Microwave Doppler Radar — Node A only
+10.525 GHz X-Band continuous-wave Doppler radar. Mounted above the canal at 30-45° angle, aimed along the water flow direction. Measures surface water velocity non-contact — no pipes, no moving parts, no clogging. The analog IF output (microvolt-level) is amplified by an LM358 op-amp circuit before reaching the ESP32 ADC. The ESP32 performs FFT on the sampled signal to extract the dominant Doppler frequency, which converts to velocity via V = Fd / (72 × cos θ). Combined with real-time depth from the JSN-SR04T, computes volumetric flow rate.
 
 ### KY-003 Hall Sensor — DIY Tipping Bucket Rain Gauge
 Magnet on DIY tipping bucket. Each tip counted as rainfall volume increment. Provides predictive context and ML training data.
@@ -144,7 +144,7 @@ Each node includes a 5V active buzzer and LED indicators (red, yellow, blue). Al
 
 ## VII. Sensor Modularity
 
-All nodes expose the same UART, SPI, and GPIO interfaces. Node B carries JSN-SR04T only. Flow sensor, rain gauge, and solar panel can be added without board changes or firmware reflash.
+All nodes expose the same UART, SPI, and GPIO interfaces. Node B carries JSN-SR04T only. Doppler radar, rain gauge, and solar panel can be added without board changes or firmware reflash.
 
 **Three demonstrated configurations:**
 - Full node: water level + flow rate + rainfall + solar
@@ -183,11 +183,11 @@ Red requires both conditions. The MDRRMO absolute height gate prevents false Red
 
 ### Canal Clog Detection
 
-Detected when: water level is rising while flow rate is dropping — indicates blockage upstream, not rainfall-driven rise.
+Clog detection triggers when water level (JSN-SR04T) rises while surface velocity (HB100) drops — indicating upstream blockage rather than rainfall-driven rise.
 
 | Level | Trigger | Field Signal | Official Channel |
 |-------|---------|-------------|-----------------|
-| Clog | Level rising + flow rate dropping (Node A only) | Slow triple beep, blue LED | SMS to barangay maintenance immediately; escalate to DRRMO if unresolved within configurable window |
+| Clog | Level rising + surface velocity dropping (Node A only) | Slow triple beep, blue LED | SMS to barangay maintenance immediately; escalate to DRRMO if unresolved within configurable window |
 
 Clog alerts are intentionally separate from flood alert levels — they indicate a maintenance issue, not an imminent evacuation threat. A clog that goes uncleared can escalate into a flood alert independently.
 
@@ -198,6 +198,7 @@ Clog alerts are intentionally separate from flood alert levels — they indicate
 | Layer       | Tool                             | Cost       |
 |-------------|----------------------------------|------------|
 | Firmware    | Arduino IDE + LoRaMesher         | Free       |
+| Simulation  | Wokwi (ESP32 simulator)          | Free       |
 | ML model    | Edge Impulse (academic tier)     | Free       |
 | Backend     | Firebase Realtime Database       | Free tier  |
 | Dashboard   | Three.js + Chart.js              | Free       |
@@ -219,7 +220,8 @@ Clog alerts are intentionally separate from flood alert levels — they indicate
 | SX1278 Ra-02 LoRa 433MHz        | ₱305       |
 | 12dBi antenna + SMA-uFL adapter | ₱139       |
 | JSN-SR04T ultrasonic sensor     | ₱174       |
-| YF-S201 flow sensor             | ₱135       |
+| HB100 microwave Doppler radar   | ₱150       |
+| LM358 op-amp + resistors/capacitors (HB100 amplifier circuit) | ₱35 |
 | KY-003 hall sensor              | ₱20        |
 | 6V 1W solar panel               | ₱249       |
 | 2N2222A transistor              | ₱7         |
@@ -228,14 +230,12 @@ Clog alerts are intentionally separate from flood alert levels — they indicate
 | Enclosure                       | ₱175       |
 | Cable glands                    | ₱30        |
 | JSN-SR04T mounting bracket      | ₱35        |
-| YF-S201 pipe fittings/tubing    | ₱75        |
 | Tipping bucket parts (DIY)      | ₱55        |
 | Active buzzer module (5V)       | ₱25        |
 | 5mm LED — red, yellow, blue     | ₱20        |
 | Current-limiting resistors      | ₱5         |
 | JST-XH connector sets (4 ports) | ₱20        |
-| 4-position DIP switch           | ₱10        |
-| **Node A total**                | **₱1,970** |
+| **Node A total**                | **₱1,960** |
 
 ### Node B — minimal configuration
 
@@ -257,8 +257,7 @@ Clog alerts are intentionally separate from flood alert levels — they indicate
 | 5mm LED — red, yellow, blue     | ₱20        |
 | Current-limiting resistors      | ₱5         |
 | JST-XH connector sets (4 ports) | ₱20        |
-| 4-position DIP switch           | ₱10        |
-| **Node B total**                | **₱1,431** |
+| **Node B total**                | **₱1,421** |
 
 ### Base Station
 
@@ -282,11 +281,11 @@ Clog alerts are intentionally separate from flood alert levels — they indicate
 
 | Item         | Cost       |
 |--------------|------------|
-| Node A       | ₱1,970     |
-| Node B       | ₱1,431     |
+| Node A       | ₱1,960     |
+| Node B       | ₱1,421     |
 | Base station | ₱200       |
 | Shared       | ₱322       |
-| **Total**    | **₱3,923** |
+| **Total**    | **₱3,913** |
 
 > Enclosure, bracket, fitting, and tipping bucket costs are mid-range estimates.
 
