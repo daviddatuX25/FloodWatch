@@ -2083,6 +2083,8 @@ void loop() {
 
 ### Task 13c: Adaptive Sleep — Test Sketch
 
+> ⚠️ **Mesh relay constraint:** REDUCED and WATCHDOG modes power down Ra-02 during sleep. A sleeping node cannot relay packets for other nodes. These modes are only safe when every node has direct LoRa range to the base station (true for the 2-node prototype). For multi-hop deployments, relay-critical intermediate nodes must stay ACTIVE. See `adaptive-sleep-mode.md` for the full analysis and future relay-aware sleep design.
+
 **Builds on:** Task 13b (HB100 switch working), Task 13 (deep sleep working)
 
 **Files:**

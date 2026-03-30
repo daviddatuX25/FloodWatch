@@ -183,6 +183,22 @@ Send `[0xFF, 0x00, 0x02]` → WATCHDOG. Send `[0xFF, 0x01, 0x02]` → alert over
 
 ---
 
+## Mesh Relay Constraint ⚠️
+
+**Deep sleep breaks LoRaMesher relay.** A node in WATCHDOG (30min sleep) or REDUCED (5min sleep) has its Ra-02 powered off and cannot forward packets from other nodes. In a multi-hop chain, a sleeping intermediate node silently isolates all nodes behind it.
+
+**Current constraint (prototype):** REDUCED and WATCHDOG modes are only safe when **every node has direct LoRa range to the base station**. Do not assign deep sleep modes to relay-critical intermediate nodes.
+
+**For multi-hop deployments (future):** Decouple sensor duty cycle from relay duty cycle:
+- Relay wakeup: every ~2 minutes (brief Ra-02 listen window, ~2s)
+- Sensor wakeup: per sleep mode (30s / 5min / 30min)
+- Ra-02 stays in intermittent listen mode between sensor reads
+- Significant firmware complexity increase — defer to Layer 5 design review
+
+**Open item:** Before deploying beyond 2-node prototype, audit mesh topology and mark which nodes are relay-critical. Relay-critical nodes must stay at ACTIVE or use relay-aware sleep.
+
+---
+
 ## Open Items
 
 - [ ] GPIO 21 bench test: confirm 100kΩ pull-up does not prevent transistor from fully turning off
@@ -190,3 +206,4 @@ Send `[0xFF, 0x00, 0x02]` → WATCHDOG. Send `[0xFF, 0x01, 0x02]` → alert over
 - [ ] Rain tip counter overflow: `uint8_t` → consider `uint16_t` for typhoon conditions
 - [ ] Firebase dashboard: add `sleep_mode` field to node status view
 - [ ] Base station Python cron job (separate sub-project — this spec defines the interface)
+- [ ] Multi-hop relay-aware sleep: design relay wakeup interval separate from sensor interval (defer to Layer 5)
