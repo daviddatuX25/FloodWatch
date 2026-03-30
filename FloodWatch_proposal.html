@@ -138,6 +138,35 @@
     .tag-official { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
     .tag-gate { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
 
+    /* STAT CARDS */
+    .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(175px, 1fr)); gap: 14px; margin-bottom: 28px; }
+    .stat-card { background: white; border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; }
+    .stat-card .stat-num { font-size: 1.7rem; font-weight: 800; color: var(--blue); line-height: 1.1; }
+    .stat-card .stat-num.red { color: #dc2626; }
+    .stat-card .stat-num.orange { color: #ea580c; }
+    .stat-card .stat-label { font-size: 12px; color: var(--gray); margin-top: 4px; line-height: 1.4; }
+    .stat-card .stat-source { font-size: 10px; color: #9ca3af; margin-top: 6px; }
+    .gap-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 20px 0; }
+    .gap-box { background: white; border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+    .gap-box.exists { border-top: 4px solid #16a34a; }
+    .gap-box.missing { border-top: 4px solid #dc2626; }
+    .gap-box h4 { font-size: .88rem; font-weight: 700; margin-bottom: 12px; }
+    .gap-box.exists h4 { color: #16a34a; }
+    .gap-box.missing h4 { color: #dc2626; }
+    .gap-box ul { padding-left: 16px; }
+    .gap-box li { font-size: .82rem; color: var(--gray); margin-bottom: 6px; line-height: 1.4; }
+    .impact-modes { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 20px; }
+    .impact-mode { background: white; border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+    .impact-mode.mode1 { border-top: 4px solid #3b82f6; }
+    .impact-mode.mode2 { border-top: 4px solid #8b5cf6; }
+    .impact-mode h4 { font-size: .9rem; font-weight: 700; margin-bottom: 8px; }
+    .impact-mode.mode1 h4 { color: #3b82f6; }
+    .impact-mode.mode2 h4 { color: #8b5cf6; }
+    .impact-mode p { font-size: .82rem; color: var(--gray); margin-bottom: 8px; }
+    .impact-mode .who { font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: .5px; }
+    .caveat-box { background: #fef9c3; border: 1px solid #fde68a; border-radius: 10px; padding: 14px 18px; margin-top: 16px; font-size: .83rem; color: #78350f; }
+    .caveat-box strong { display: block; margin-bottom: 4px; }
+
     /* BUZZER PATTERNS */
     .patterns { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
     .pattern {
@@ -197,7 +226,7 @@
 
     @media (max-width: 600px) {
       .hero { padding: 40px 20px 36px; }
-      .pipeline, .deploy-tiers { grid-template-columns: 1fr; }
+      .pipeline, .deploy-tiers, .gap-grid, .impact-modes { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -258,6 +287,83 @@
         <h3>Canal Health Monitoring</h3>
         <p>Detects blockages by correlating rising water level (JSN-SR04T) with dropping surface velocity (HB100 Doppler radar) — alerts maintenance crews before a clog escalates into a flood.</p>
       </div>
+    </div>
+  </section>
+
+  <!-- PROBLEM & IMPACT -->
+  <section>
+    <div class="section-title">Problem & Impact</div>
+    <h2>Why This Matters</h2>
+    <p>Flooding is the Philippines' most recurring disaster. These are not projections — they are documented outcomes from recent years.</p>
+
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-num red">362</div>
+        <div class="stat-label">Deaths from floods and typhoons in 2024 alone</div>
+        <div class="stat-source">PSA / NDRRMC 2024</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num orange">₱21B</div>
+        <div class="stat-label">Damages from the Oct–Nov 2024 typhoon cluster (Kristine, Leon, others)</div>
+        <div class="stat-source">UN CBi / NDRRMC 2024</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num">6.2M</div>
+        <div class="stat-label">People affected by Typhoon Carina in July 2024 alone</div>
+        <div class="stat-source">NDRRMC 2024</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num orange">$124B</div>
+        <div class="stat-label">Projected GDP loss from storms and floods, Philippines, 2022–2050</div>
+        <div class="stat-source">GHD Aquanomics model</div>
+      </div>
+    </div>
+
+    <p>Metro Manila concentrates the risk. CAMANAVA (Caloocan, Malabon, Navotas, Valenzuela) subsides 20–42mm per year from groundwater extraction. Drainage infrastructure was designed for a smaller, less paved city. Canals clog. Every major rain event produces the same list of flooded roads: Espana–Lacson, EDSA-Muñoz, Lagusnilad Underpass, Pasig-C5, Parañaque-Sucat. The geography of flooding in Metro Manila is largely predictable. What is missing is real-time data at those specific locations.</p>
+
+    <h3 style="margin-top:24px;">What Exists — and What Doesn't</h3>
+    <div class="gap-grid">
+      <div class="gap-box exists">
+        <h4>✓ What Exists</h4>
+        <ul>
+          <li><strong>DOST-ASTI PhilSensors:</strong> 2,000+ stations nationwide — automated rain gauges, weather stations, and water level sensors on rivers and major water bodies. Publicly accessible via app (updated Sept 2023).</li>
+          <li><strong>PAGASA flood forecasting:</strong> River basin and watershed-level warnings issued to LGUs. National-scale coverage.</li>
+          <li><strong>Project NOAH (UP Diliman):</strong> 1,000+ sensors. In 2023 deployed street-level flood depth sensors at 3 pilot locations in Quezon City.</li>
+          <li><strong>GIZ Local FEWS:</strong> 16 community warning systems across 12 provinces, benefitting ~750,000 people since 2007.</li>
+          <li><strong>MMDA flood updates:</strong> Field observers report flood depth via social media — "knee-deep," "tire-deep" — during active flooding events.</li>
+        </ul>
+      </div>
+      <div class="gap-box missing">
+        <h4>✗ What Is Missing</h4>
+        <ul>
+          <li><strong>Road-crossing depth monitoring at scale:</strong> Project NOAH's 3 QC pilot sites is the only confirmed sensor-based road-level deployment in Metro Manila. MMDA coverage is reactive and human-reported.</li>
+          <li><strong>Barangay-level independent data feed:</strong> Barangay DRRMO officers receive advisories from city/national level — they have no real-time sensor feed of their own canal or street conditions.</li>
+          <li><strong>Resilient last-mile transmission:</strong> ASTI's monitoring stations transmit via SMS — which is documented to cut out during heavy rain, exactly when data is most needed.</li>
+          <li><strong>Canal clog detection:</strong> No existing government system monitors canal blockage conditions as distinct from flood level. Clogs go undetected until they cause flooding.</li>
+          <li><strong>Localized flash flood detection:</strong> GIZ documentation states "extreme local weather events are often not recorded by national warning centres" — a single barangay canal overflowing is invisible to river-basin gauges.</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3 style="margin-top:8px;">Two Ways FloodWatch Closes the Gap</h3>
+    <div class="impact-modes">
+      <div class="impact-mode mode1">
+        <h4>Mode 1 — Canal Upstream Warning</h4>
+        <p>Sensor node in or above a canal monitors water level and surface flow. Detects rate-of-rise and clog conditions before overflow. Sends alerts to barangay officials who can act — evacuate, clear a clog, open a drain gate.</p>
+        <p class="who">Who it helps: Barangay tanods, DRRMO officers, maintenance crews</p>
+        <p style="font-size:.78rem; color:#94a3b8; margin:0;">Requires: official adoption by LGU to translate alerts into action</p>
+      </div>
+      <div class="impact-mode mode2">
+        <h4>Mode 2 — Road Crossing Depth Gauge</h4>
+        <p>Minimal Node B (JSN-SR04T only, ~₱1,400) mounted above a known flood-prone road crossing or underpass. Measures actual water depth at that spot. Public dashboard — no login — shows live depth at named locations. Commuters check before deciding to pass through.</p>
+        <p class="who">Who it helps: Workers, commuters, residents in urban flood hotspots</p>
+        <p style="font-size:.78rem; color:#94a3b8; margin:0;">Does not require institutional response — individuals act on the data</p>
+      </div>
+    </div>
+
+    <div class="caveat-box">
+      <strong>Honest Limitation</strong>
+      A two-node prototype does not protect a community by itself. The prototype validates the technology and pipeline. Sustained real-world impact requires LGU adoption, a named maintenance person, and multi-node deployment across actual flood corridors. The prototype is the evidence base for that conversation — not the end state.
     </div>
   </section>
 
@@ -403,11 +509,11 @@
     <div class="cost-summary">
       <div class="cost-card">
         <div class="label">Node A (Full)</div>
-        <div class="amount">₱1,960</div>
+        <div class="amount">₱2,456</div>
       </div>
       <div class="cost-card">
         <div class="label">Node B (Minimal)</div>
-        <div class="amount">₱1,421</div>
+        <div class="amount">₱1,478</div>
       </div>
       <div class="cost-card">
         <div class="label">Base Station</div>
@@ -418,8 +524,9 @@
         <div class="amount">₱322</div>
       </div>
       <div class="cost-card total">
-        <div class="label">Grand Total</div>
-        <div class="amount">₱3,913</div>
+        <div class="label">Purchased Total</div>
+        <div class="amount">₱4,456</div>
+        <div class="diff">+ deferred costs below</div>
       </div>
     </div>
 
@@ -428,28 +535,31 @@
       <table>
         <thead><tr><th>Component</th><th>Price</th></tr></thead>
         <tbody>
-          <tr><td>Wemos Lolin32 v1</td><td>₱192</td></tr>
+          <tr><td>Wemos Lolin32 v1</td><td>₱194</td></tr>
           <tr><td>18650 2200mAh cell</td><td>₱165</td></tr>
           <tr><td>18650 holder 4-slot</td><td>₱37</td></tr>
           <tr><td>SX1278 Ra-02 LoRa 433MHz</td><td>₱305</td></tr>
-          <tr><td>12dBi antenna + SMA-uFL adapter</td><td>₱139</td></tr>
+          <tr><td>12dBi antenna + SMA-uFL adapter</td><td>₱133</td></tr>
           <tr><td>JSN-SR04T ultrasonic sensor</td><td>₱174</td></tr>
-          <tr><td>HB100 microwave Doppler radar</td><td>₱150</td></tr>
+          <tr><td>HB100 microwave Doppler radar</td><td>₱125</td></tr>
           <tr><td>LM358 op-amp + resistors/capacitors (HB100 amplifier circuit)</td><td>₱35</td></tr>
-          <tr><td>KY-003 hall sensor</td><td>₱20</td></tr>
+          <tr><td>KY-003 hall sensor + neodymium magnet</td><td>₱99</td></tr>
           <tr><td>6V 1W solar panel</td><td>₱249</td></tr>
           <tr><td>2N2222A transistor</td><td>₱7</td></tr>
           <tr><td>Dupont MF cables</td><td>₱37</td></tr>
-          <tr><td>PCB 5x7 universal board</td><td>₱55</td></tr>
-          <tr><td>Enclosure</td><td>₱175</td></tr>
-          <tr><td>Cable glands</td><td>₱30</td></tr>
+          <tr><td>PCB 8x12cm universal board</td><td>₱69</td></tr>
+          <tr><td>GX16-5P aviation connector (PORT-WL)</td><td>₱77</td></tr>
+          <tr><td>GX16-4P aviation connector ×3 (PORT-WF, PORT-RG, spare)</td><td>₱228</td></tr>
+          <tr><td>GX16-2P aviation connector (solar input)</td><td>₱69</td></tr>
+          <tr><td>JST XH2.54 connector sets (2P/3P/4P/5P)</td><td>₱57</td></tr>
           <tr><td>JSN-SR04T mounting bracket</td><td>₱35</td></tr>
-          <tr><td>Tipping bucket parts (DIY)</td><td>₱55</td></tr>
+          <tr><td>Tipping bucket parts (outsourced)</td><td>₱55</td></tr>
           <tr><td>Active buzzer module (5V)</td><td>₱25</td></tr>
           <tr><td>5mm LED — red, yellow, blue</td><td>₱20</td></tr>
+          <tr><td>EMI copper foil tape (horn metallization)</td><td>₱88</td></tr>
           <tr><td>Current-limiting resistors</td><td>₱5</td></tr>
-          <tr><td>JST-XH connector sets (4 ports)</td><td>₱20</td></tr>
-          <tr><td><strong>Node A Total</strong></td><td><strong>₱1,960</strong></td></tr>
+          <tr><td>1N5819 Schottky diode (solar protection)</td><td>₱8</td></tr>
+          <tr><td><strong>Node A Total</strong></td><td><strong>₱2,456</strong></td></tr>
         </tbody>
       </table>
     </div>
@@ -459,23 +569,22 @@
       <table>
         <thead><tr><th>Component</th><th>Price</th></tr></thead>
         <tbody>
-          <tr><td>Wemos Lolin32 v1</td><td>₱192</td></tr>
+          <tr><td>Wemos Lolin32 v1</td><td>₱194</td></tr>
           <tr><td>18650 2200mAh cell</td><td>₱165</td></tr>
           <tr><td>18650 holder 4-slot</td><td>₱37</td></tr>
           <tr><td>SX1278 Ra-02 LoRa 433MHz</td><td>₱305</td></tr>
-          <tr><td>12dBi antenna + SMA-uFL adapter</td><td>₱139</td></tr>
+          <tr><td>12dBi antenna + SMA-uFL adapter</td><td>₱133</td></tr>
           <tr><td>JSN-SR04T ultrasonic sensor</td><td>₱174</td></tr>
           <tr><td>2N2222A transistor</td><td>₱7</td></tr>
           <tr><td>Dupont MF cables</td><td>₱37</td></tr>
-          <tr><td>PCB 5x7 universal board</td><td>₱55</td></tr>
-          <tr><td>Enclosure</td><td>₱175</td></tr>
-          <tr><td>Cable glands</td><td>₱30</td></tr>
+          <tr><td>PCB 8x12cm universal board</td><td>₱69</td></tr>
+          <tr><td>GX16-5P aviation connector (PORT-WL)</td><td>₱77</td></tr>
+          <tr><td>JST XH2.54 connector sets</td><td>₱46</td></tr>
           <tr><td>JSN-SR04T mounting bracket</td><td>₱35</td></tr>
           <tr><td>Active buzzer module (5V)</td><td>₱25</td></tr>
           <tr><td>5mm LED — red, yellow, blue</td><td>₱20</td></tr>
           <tr><td>Current-limiting resistors</td><td>₱5</td></tr>
-          <tr><td>JST-XH connector sets (4 ports)</td><td>₱20</td></tr>
-          <tr><td><strong>Node B Total</strong></td><td><strong>₱1,421</strong></td></tr>
+          <tr><td><strong>Node B Total</strong></td><td><strong>₱1,478</strong></td></tr>
         </tbody>
       </table>
     </div>
@@ -495,7 +604,21 @@
         </tbody>
       </table>
     </div>
-    <p style="font-size:12px; color:#94a3b8; margin-top: -12px;">Enclosure, bracket, fitting, and tipping bucket costs are mid-range estimates.</p>
+    <h3>Deferred / Pending Costs</h3>
+    <p style="font-size:.85rem; color:#475569; margin-bottom:12px;">These items are intentionally deferred — enclosure sizing requires physical verification, and 3D print costs depend on final designs. Not included in the purchased total above.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Item</th><th>Est. Cost</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>IP65 enclosures — 2× core hubs (L-size, ~115×90×55mm)</td><td>~₱378</td><td>Sizing TBD</td></tr>
+          <tr><td>IP65 enclosure — WF module sub-box (S-size, ~83×58×33mm)</td><td>~₱95</td><td>Sizing TBD</td></tr>
+          <tr><td>3D printing service — horn body, angle adjuster, pole arm clamps</td><td>TBD</td><td>Pending design finalization</td></tr>
+          <tr><td>Foam gasket strip (horn throat seal, ~2–3mm)</td><td>~₱15</td><td>Buy with enclosures</td></tr>
+          <tr><td><strong>Deferred Subtotal (excl. 3D print)</strong></td><td><strong>~₱488</strong></td><td></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="font-size:12px; color:#94a3b8; margin-top: -12px;">All GX16 aviation connectors act as cable glands — no separate cable glands required. Solar input uses GX16-2P.</p>
   </section>
 
   <!-- SOFTWARE -->

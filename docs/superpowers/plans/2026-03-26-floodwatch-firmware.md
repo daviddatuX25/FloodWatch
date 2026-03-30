@@ -36,7 +36,7 @@ firmware/
     ├── FloodWatch_Node.ino           # Main setup/loop, sleep/wake cycle
     ├── config.h                      # Pin assignments, constants, packet format
     ├── detect.h                      # Auto-detection function declarations
-    ├── detect.cpp                    # Auto-detect plugged sensors, read DIP switch
+    ├── detect.cpp                    # Auto-detect plugged sensors, read chip MAC for node_id
     ├── sensors.h                     # Sensor reading declarations
     ├── sensors.cpp                   # Read JSN-SR04T, HB100 (ADC+FFT), KY-003, battery
     ├── actuators.h                   # Actuator control declarations

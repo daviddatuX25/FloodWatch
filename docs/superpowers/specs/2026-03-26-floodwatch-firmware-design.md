@@ -58,7 +58,7 @@ Final node assembly: PCB soldering (off breadboard), enclosure layout, cable gla
 
 | Field | Size | Description |
 |---|---|---|
-| node_id | 1 byte | Unique per node (set via DIP switch) |
+| node_id | 1 byte | Unique per node (last byte of ESP32 MAC address) |
 | packet_type | 1 byte | 0x01 = sensor data, 0x02 = heartbeat |
 | water_level_cm | 2 bytes | JSN-SR04T reading (unsigned, cm) |
 | surface_velocity | 2 bytes | HB100 reading (mm/s, 0 if no sensor) |
@@ -132,14 +132,9 @@ Standard pin map for all Lolin32 field nodes. Unused sensors simply aren't wired
 | LED Yellow | GPIO 12 | Via 220Ω resistor |
 | LED Blue | GPIO 13 | Via 220Ω resistor |
 
-### DIP Switch (Node ID)
+### Node ID
 
-| Bit | Lolin32 Pin | Notes |
-|---|---|---|
-| Bit 0 (LSB) | GPIO 21 | With external 10kΩ pull-up |
-| Bit 1 | GPIO 22 | With external 10kΩ pull-up |
-| Bit 2 | GPIO 34 | Input-only, external 10kΩ pull-up |
-| Bit 3 (MSB) | GPIO 36 | Input-only, external 10kΩ pull-up |
+Derived at boot from the last byte of the ESP32's built-in MAC address via `readChipId()`. Unique per chip — no hardware required. GPIOs 21, 22, 34, 36 are free for future use.
 
 ### Battery Monitoring
 
@@ -169,7 +164,7 @@ A `detectHardware()` function in `setup()` populates:
 
 ```cpp
 struct NodeConfig {
-  uint8_t node_id;       // read from DIP switch
+  uint8_t node_id;       // last byte of ESP32 MAC address (readChipId())
   bool has_flow;
   bool has_rain;
   bool has_lora;
@@ -179,13 +174,13 @@ struct NodeConfig {
 
 No reflash needed to change node configuration. Plug a sensor in, reboot, it's detected.
 
-**Node ID:** 4-position DIP switch (~₱10) on the PCB. Set node address physically. Supports up to 15 nodes.
+**Node ID:** Derived from the last byte of the ESP32's built-in MAC address at boot (`readChipId()`). Unique per chip, zero cost, no hardware required.
 
 ### Firmware Loop
 
 ```
 setup()
-  → read DIP switch → node_id
+  → readChipId() → node_id
   → detectHardware() → NodeConfig
   → init detected sensors
   → init LoRaMesher
@@ -210,7 +205,7 @@ loop()
 |---|---|
 | `FloodWatch_Node.ino` | Main setup/loop, sleep/wake cycle |
 | `config.h` | Pin assignments, constants |
-| `detect.h/.cpp` | Auto-detect plugged sensors, read DIP switch, populate NodeConfig |
+| `detect.h/.cpp` | Auto-detect plugged sensors, read chip MAC for node_id, populate NodeConfig |
 | `sensors.h/.cpp` | Read JSN-SR04T, HB100 (ADC + FFT), KY-003, battery ADC (skips absent sensors) |
 | `lora_comm.h/.cpp` | LoRaMesher init, send uplink, receive downlink |
 | `actuators.h/.cpp` | Buzzer patterns, LED states, map alert_state to output |
@@ -233,12 +228,12 @@ All sensor and power connections use JST-XH connectors. No soldered sensor wires
 | Pin header 2x4 | Ra-02 LoRa module | Daughter-board with SMA connector, slides onto headers |
 
 Benefits:
-- **Setup:** Plug in sensors, set DIP switch, power on
+- **Setup:** Plug in sensors, power on
 - **Repair:** Unplug broken sensor, plug in replacement. No soldering
 - **Upgrade:** Add flow sensor to a minimal node later — just plug it in
 - **Testing:** During Layer 1, plug one sensor at a time into the same board
 
-Additional BOM per node: JST-XH connector sets (~₱5 each × 4 = ₱20) + DIP switch (~₱10) = ~₱30.
+Additional BOM per node: JST-XH connector sets (~₱5 each × 4 = ₱20).
 
 ---
 
@@ -298,7 +293,6 @@ IP65 ABS box, approximately 150×100×70mm.
 │         │  Buzzer   │       │  Behind mesh vent (sound out, water blocked)
 │         │  (mesh)   │       │
 │         └──────────┘        │
-│  [DIP SW]                   │  Node ID, accessible from outside
 └─────────────────────────────┘
 ```
 
@@ -348,17 +342,16 @@ Modular connector additions per node:
 | Addition | Cost |
 |---|---|
 | JST-XH connector sets (4 ports) | ~₱20 |
-| 4-position DIP switch | ~₱10 |
-| **Per-node addition** | **~₱30** |
+| **Per-node addition** | **~₱20** |
 
 Updated node totals (from v3 design):
 
 | Node | v3 Price | + Connectors | New Total |
 |---|---|---|---|
-| Node A (full) | ₱1,940 | +₱30 | ₱1,960 |
-| Node B (minimal) | ₱1,401 | +₱30 | ₱1,431 |
+| Node A (full) | ₱1,940 | +₱20 | ₱1,960 |
+| Node B (minimal) | ₱1,401 | +₱20 | ₱1,421 |
 
-Grand total: ₱1,960 + ₱1,431 + ₱200 (base station) + ₱322 (shared) = **₱3,913**
+Grand total: ₱1,960 + ₱1,421 + ₱200 (base station) + ₱322 (shared) = **₱3,903**
 
 ---
 
