@@ -2008,6 +2008,189 @@ git commit -m "feat: add power module with deep sleep and transistor switching"
 
 ---
 
+### Task 13b: HB100 Power Switch — Hardware + Smoke Test
+
+**Builds on:** Task 13 (transistor switching pattern already working for Ra-02)
+
+**What you need:** Lolin32, HB100 + LM358 amp circuit assembled, one 2N2222A transistor, one 1kΩ resistor, multimeter or oscilloscope
+
+**Wiring (add to core PCB alongside GPIO 4 circuit):**
+
+```
+GPIO 21 ──[1kΩ]── 2N2222A base
+                  2N2222A collector ── HB100 VCC (5V)
+                  2N2222A emitter  ── GND
+```
+
+> Why GPIO 21? GPIOs 34 and 36 are input-only on ESP32 — they cannot drive transistors. GPIO 21 is the only available output-capable free pin. It has a 100kΩ pull-up on the Lolin32 board (I2C default) but this is harmless: 100kΩ only contributes 0.033mA vs the 2.6mA base drive through 1kΩ.
+
+- **Step 1: Write the smoke test sketch**
+
+```cpp
+// test_hb100_power_switch.ino
+// Confirms GPIO 21 correctly gates HB100 power via 2N2222A.
+// Watch GPIO 27 ADC variance: HIGH when HB100 on, near-zero when off.
+
+#define HB100_PWR_PIN 21
+#define HB100_ADC_PIN 27
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(HB100_PWR_PIN, OUTPUT);
+  digitalWrite(HB100_PWR_PIN, LOW); // HB100 off at boot
+  Serial.println("=== HB100 Power Switch Test ===");
+}
+
+void loop() {
+  // Power on, wait warmup, sample ADC variance
+  Serial.println("HB100 ON");
+  digitalWrite(HB100_PWR_PIN, HIGH);
+  delay(200); // warmup
+  long sumSq = 0, sum = 0;
+  for (int i = 0; i < 100; i++) {
+    int v = analogRead(HB100_ADC_PIN);
+    sum += v; sumSq += (long)v * v;
+    delay(1);
+  }
+  int variance = (sumSq / 100) - (sum / 100) * (sum / 100);
+  Serial.print("ADC variance (ON): "); Serial.println(variance);
+
+  // Power off, sample again
+  Serial.println("HB100 OFF");
+  digitalWrite(HB100_PWR_PIN, LOW);
+  delay(500);
+  sumSq = 0; sum = 0;
+  for (int i = 0; i < 100; i++) {
+    int v = analogRead(HB100_ADC_PIN);
+    sum += v; sumSq += (long)v * v;
+    delay(1);
+  }
+  variance = (sumSq / 100) - (sum / 100) * (sum / 100);
+  Serial.print("ADC variance (OFF): "); Serial.println(variance);
+  Serial.println("---");
+  delay(2000);
+}
+```
+
+**Acceptance criteria:**
+- ADC variance ON: meaningfully higher than OFF (HB100 noise floor visible)
+- ADC variance OFF: near-zero (HB100 fully powered down)
+- No spurious HB100 power-on at boot (first OFF reading should be low)
+
+> **Wokwi:** Use an LED on GPIO 21 as proxy for transistor gate. Cannot simulate HB100 IF signal.
+
+---
+
+### Task 13c: Adaptive Sleep — Test Sketch
+
+**Builds on:** Task 13b (HB100 switch working), Task 13 (deep sleep working)
+
+**Files:**
+
+- Create: `firmware/test_sketches/test_adaptive_sleep/test_adaptive_sleep.ino`
+
+**What to prove:** All three sleep modes produce correct durations. HB100 GPIO is driven only in ACTIVE mode. RTC memory persists `g_sleep_mode` across a hard reset (power cycle).
+
+- **Step 1: Write the test sketch**
+
+```cpp
+// test_adaptive_sleep.ino
+// Tests ACTIVE / REDUCED / WATCHDOG sleep modes.
+// Serial input: 'A' = ACTIVE (30s), 'R' = REDUCED (5min), 'W' = WATCHDOG (30min)
+// On each wake: prints mode name, sleep duration, GPIO 21 state.
+
+#include "esp_sleep.h"
+
+#define HB100_PWR_PIN 21
+#define SLEEP_MODE_ACTIVE   0
+#define SLEEP_MODE_REDUCED  1
+#define SLEEP_MODE_WATCHDOG 2
+
+RTC_DATA_ATTR uint8_t g_sleep_mode = SLEEP_MODE_ACTIVE;
+RTC_DATA_ATTR uint32_t g_wake_count = 0;
+
+const char* mode_names[] = {"ACTIVE", "REDUCED", "WATCHDOG"};
+const uint32_t sleep_durations_s[] = {30, 300, 1800};
+
+void setup() {
+  Serial.begin(115200);
+  delay(100);
+  pinMode(HB100_PWR_PIN, OUTPUT);
+  digitalWrite(HB100_PWR_PIN, LOW);
+
+  g_wake_count++;
+  Serial.printf("\n=== Wake #%lu | Mode: %s ===\n",
+    (unsigned long)g_wake_count, mode_names[g_sleep_mode]);
+
+  if (g_sleep_mode == SLEEP_MODE_ACTIVE) {
+    Serial.println("HB100 ON (200ms warmup)");
+    digitalWrite(HB100_PWR_PIN, HIGH);
+    delay(200);
+    Serial.println("HB100 OFF");
+    digitalWrite(HB100_PWR_PIN, LOW);
+  } else {
+    Serial.println("HB100 skipped (not ACTIVE mode)");
+  }
+
+  uint32_t sleep_s = sleep_durations_s[g_sleep_mode];
+  Serial.printf("Sleeping %lu seconds. Send A/R/W to change mode.\n", (unsigned long)sleep_s);
+  Serial.println("(Check Serial now before sleep starts — 5s window)");
+
+  // 5s window to change mode via Serial
+  unsigned long deadline = millis() + 5000;
+  while (millis() < deadline) {
+    if (Serial.available()) {
+      char c = Serial.read();
+      if (c == 'A') { g_sleep_mode = SLEEP_MODE_ACTIVE;   Serial.println("Mode set: ACTIVE"); }
+      if (c == 'R') { g_sleep_mode = SLEEP_MODE_REDUCED;  Serial.println("Mode set: REDUCED"); }
+      if (c == 'W') { g_sleep_mode = SLEEP_MODE_WATCHDOG; Serial.println("Mode set: WATCHDOG"); }
+    }
+  }
+
+  sleep_s = sleep_durations_s[g_sleep_mode]; // re-read in case changed
+  Serial.printf("Entering deep sleep for %lu seconds...\n", (unsigned long)sleep_s);
+  Serial.flush();
+  esp_sleep_enable_timer_wakeup((uint64_t)sleep_s * 1000000ULL);
+  esp_deep_sleep_start();
+}
+
+void loop() {} // never runs
+```
+
+**Acceptance criteria:**
+- Serial prints correct mode name and sleep duration on each wake
+- GPIO 21 only goes HIGH during ACTIVE mode reads
+- After hard power-cycle (not just reset): `g_wake_count` continues from where it left off (confirms RTC survives)
+- Mode changed via Serial persists to next wake
+
+> **Wokwi:** Can simulate timer deep sleep and GPIO 21 LED proxy. Validate mode switching logic and RTC variable persistence.
+
+---
+
+### Task 13d: Downlink v2 — Integration Test
+
+**Builds on:** Task 13c (sleep modes working), Layer 3 (LoRaMesher working)
+
+**What to prove:** Node correctly parses 3-byte downlink. `g_sleep_mode` and `g_alert_state` update correctly. Alert override forces ACTIVE mode even when WATCHDOG is commanded.
+
+**Test sequence (send from laptop LoRa or second node):**
+
+| Step | Send packet | Expected node behavior |
+|------|-------------|----------------------|
+| 1 | `[0xFF, 0x00, 0x02]` | Normal + WATCHDOG → enters 30min sleep |
+| 2 | `[0xFF, 0x01, 0x02]` | Yellow alert + WATCHDOG → alert override → ACTIVE mode, buzzes yellow |
+| 3 | `[0xFF, 0x00, 0x00]` | Clear + ACTIVE → returns to 30s cycle, silent |
+| 4 | `[0xFF, 0x00]` (2-byte old format) | Updates alert only, sleep_mode unchanged |
+
+**Acceptance criteria:**
+- All four steps produce correct behavior
+- After step 3, `g_sleep_mode` in RTC = ACTIVE (0), `g_alert_state` = NORMAL (0)
+- 2-byte packet does not corrupt `g_sleep_mode`
+
+> **Wokwi:** Cannot simulate LoRaMesher. Hardware-only test. Requires two Lolin32 + Ra-02 nodes.
+
+---
+
 ### Task 14: Main Firmware — FloodWatch_Node.ino (Final)
 
 **Files:**

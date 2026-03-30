@@ -72,12 +72,12 @@ Firmware is validated in Wokwi (free ESP32 simulator) before uploading to physic
 
 ## Updated BOM Summary
 
-| Item | v2 | v3 | v3 + connectors |
-|------|----|----|-----------------|
-| Node A | ₱1,890 | ₱1,940 | ₱1,960 |
-| Node B | ₱1,351 | ₱1,401 | ₱1,421 |
-| Base station | ₱200 | ₱200 | ₱200 |
-| Shared | ₱322 | ₱322 | ₱322 |
-| **Total** | **₱3,763** | **₱3,863** | **₱3,903** |
+| Item | v2 | v3 | v3 + connectors | current (actual cart) |
+|------|----|----|-----------------|----------------------|
+| Node A | ₱1,890 | ₱1,940 | ₱1,960 | **₱2,456** |
+| Node B | ₱1,351 | ₱1,401 | ₱1,421 | **₱1,478** |
+| Base station | ₱200 | ₱200 | ₱200 | ₱200 |
+| Shared | ₱322 | ₱322 | ₱322 | ₱322 |
+| **Total** | **₱3,763** | **₱3,863** | **₱3,903** | **₱4,456** |
 
-Connector additions: JST-XH connector sets (₱20) per node.
+Current column additions over v3+connectors: GX16 aviation connectors (5P, 4P×3, 2P) replacing cable glands, EMI copper foil tape for HB100 horn metallization, 1N5819 Schottky diode, PCB update. Enclosures (~₱488) and 3D print fees are deferred separately.

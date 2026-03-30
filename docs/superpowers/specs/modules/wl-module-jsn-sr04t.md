@@ -38,7 +38,7 @@ The Water Level Module measures water surface distance using a waterproof ultras
 | Height above normal water | As high as practical; min 20cm clearance |
 | Beam clearance | Keep 30cm radius at water surface free of structure |
 | No separate enclosure | JSN-SR04T is IP67; cable runs directly to core enclosure |
-| Cable entry to core | Via cable gland on core enclosure (no junction box needed) |
+| Cable entry to core | Via GX16-5P connector on core enclosure panel (no junction box needed) |
 | Cable drip loop | Required — loop down before entering core enclosure |
 | GX16-5P | On core enclosure panel only (no submodule box) |
 
@@ -79,3 +79,4 @@ The Water Level Module measures water surface distance using a waterproof ultras
 - [x] 1kΩ + 2kΩ resistors covered by resistor kit in cart
 - [ ] Finalize PVC arm length for target deployment height
 - [ ] Verify M16 thread fits standard PVC 90° elbow (hardware store check)
+- [ ] Mesh guard: design stainless or PVC mesh cage around sensor face — open bottom (beam passes through), ~10mm mesh openings block floating debris (plastic bags, styrofoam, branches). Attach to existing mounting bracket. Add to Mounting Spec once design is finalized.

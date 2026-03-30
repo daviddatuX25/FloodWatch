@@ -64,20 +64,35 @@ Final node assembly: PCB soldering (off breadboard), enclosure layout, cable gla
 | surface_velocity | 2 bytes | HB100 reading (mm/s, 0 if no sensor) |
 | rain_tips | 1 byte | Tip count since last packet (0 if no gauge) |
 | battery_mv | 2 bytes | Battery voltage in millivolts |
-| flags | 1 byte | Bit flags: has_flow (HB100 velocity sensor present), has_rain, low_battery |
+| flags | 1 byte | See flags layout below |
 
 Total: 10 bytes.
+
+**Flags byte layout:**
+
+| Bit(s) | Field | Description |
+|--------|-------|-------------|
+| 0 | `has_flow` | HB100 velocity sensor present |
+| 1 | `has_rain` | KY-003 rain gauge present |
+| 2 | `low_battery` | battery_mv < LOW_BATT_THRESHOLD_MV |
+| 3–4 | `current_mode` | `0b00`=ACTIVE `0b01`=REDUCED `0b10`=WATCHDOG |
+| 5–7 | reserved | — |
 
 Nodes without flow or rain sensors send 0 in those fields with the corresponding flag unset. The base station uses flags to know which fields to interpret.
 
 ### Downlink (base station → node, via LoRaMesher)
 
+**v2 format — 3 bytes:**
+
 | Field | Size | Description |
 |---|---|---|
 | target_node_id | 1 byte | 0xFF = broadcast to all |
 | alert_state | 1 byte | 0=normal, 1=yellow, 2=orange, 3=red, 4=clog |
+| sleep_mode | 1 byte | 0=ACTIVE, 1=REDUCED, 2=WATCHDOG |
 
-Total: 2 bytes.
+Total: 3 bytes.
+
+**Backward compatibility:** Nodes check packet length. If 2 bytes received (old base station), update `alert_state` only and leave `sleep_mode` unchanged in RTC memory.
 
 Nodes map `alert_state` directly to a buzzer/LED pattern. They do not interpret alert levels — the base station owns all alert logic.
 
@@ -108,12 +123,16 @@ Standard pin map for all Lolin32 field nodes. Unused sensors simply aren't wired
 | RST | GPIO 14 | LoRa reset |
 | DIO0 | GPIO 26 | Interrupt (packet ready) |
 
-### Ra-02 Power Switching (2N2222A)
+### Power Switching (2N2222A transistors)
 
 | Component | Lolin32 Pin | Notes |
 |---|---|---|
-| 2N2222A base (via 1kΩ resistor) | GPIO 4 | HIGH = Ra-02 powered on |
-| 2N2222A collector | Ra-02 VCC | Switches 3.3V to module |
+| Ra-02 2N2222A base (via 1kΩ) | GPIO 4 | HIGH = Ra-02 powered on |
+| Ra-02 2N2222A collector | Ra-02 VCC | Switches 3.3V to module |
+| HB100 2N2222A base (via 1kΩ) | **GPIO 21** | HIGH = HB100 powered on |
+| HB100 2N2222A collector | HB100 VCC | Switches 5V to HB100 + LM358 |
+
+> GPIO 21 is the I2C SDA default but no I2C devices are used. The Lolin32 board has a 100kΩ pull-up on GPIO 21 — harmless for the transistor circuit (0.033mA vs 2.6mA base drive). GPIOs 34 and 36 are input-only on the ESP32 and cannot drive transistors.
 
 ### Sensors
 
@@ -188,15 +207,30 @@ setup()
 
 loop()
   → wake from deep sleep
+  → read RTC memory: g_sleep_mode, g_alert_state, g_last_sync_s
+  → effective_mode = g_sleep_mode
+  → if g_alert_state != NORMAL: effective_mode = ACTIVE  (alert overrides sleep mode)
   → power on Ra-02 (GPIO 4 HIGH)
-  → wait 10ms (module boot)
-  → read sensors (~200ms) → build uplink packet
-  → LoRaMesher: send packet (~500ms)
+  → if effective_mode == ACTIVE AND has_flow:
+      power on HB100 (GPIO 21 HIGH), wait 200ms warmup
+  → read sensors based on effective_mode:
+      always: JSN-SR04T (water level), battery_mv
+      if has_rain: rain_tips from RTC counter
+      if ACTIVE + has_flow: HB100 ADC → FFT → velocity
+  → if HB100 was on: GPIO 21 LOW (off before LoRa)
+  → build uplink packet (current_mode encoded in flags bits 3–4)
+  → LoRaMesher: send uplink (~500ms)
   → LoRaMesher: listen for downlink (~1s window)
+  → if 3-byte downlink: update g_alert_state + g_sleep_mode, update g_last_sync_s
+  → if 2-byte downlink: update g_alert_state only
   → if command received → set buzzer/LED pattern
   → power off Ra-02 (GPIO 4 LOW)
-  → if alert_state == normal → enter deep sleep (30s)
-  → if alert_state != normal → stay awake, run buzzer pattern, keep listening
+  → if g_alert_state != NORMAL → stay awake, run buzzer pattern, keep listening
+  → else:
+      ACTIVE   → deep sleep 30s
+      REDUCED  → deep sleep 5min
+      WATCHDOG → if (now − g_last_sync_s) > 24h: deep sleep 30s (force sync)
+                 else: deep sleep 30min
 ```
 
 ### File Structure
@@ -239,19 +273,24 @@ Additional BOM per node: JST-XH connector sets (~₱5 each × 4 = ₱20).
 
 ## Power Management
 
-### Sleep/Wake Cycle (30-second interval)
+### Adaptive Sleep Modes
 
+Three modes stored in RTC memory, commanded by the base station via LoRa downlink:
+
+```cpp
+#define SLEEP_MODE_ACTIVE    0   // 30s  — all sensors, full operation
+#define SLEEP_MODE_REDUCED   1   // 5min — water level + rain only, no HB100
+#define SLEEP_MODE_WATCHDOG  2   // 30min — water level + rain only, no HB100
 ```
-DEEP SLEEP (30s) → Wake
-  → GPIO 4 HIGH (power on Ra-02)
-  → wait 10ms (module boot)
-  → read sensors (~200ms)
-  → LoRaMesher: send uplink (~500ms)
-  → LoRaMesher: listen for downlink (~1s window)
-  → if alert command → run buzzer/LED pattern
-  → GPIO 4 LOW (power off Ra-02)
-  → GPIO 32 LOW (power off buzzer if not alerting)
-  → DEEP SLEEP
+
+Base station decides mode from 48h weather forecast (see `adaptive-sleep-mode.md`). Alert state always overrides to ACTIVE regardless of commanded mode.
+
+**RTC memory variables (survive deep sleep):**
+```cpp
+RTC_DATA_ATTR uint8_t  g_sleep_mode    = SLEEP_MODE_ACTIVE;
+RTC_DATA_ATTR uint8_t  g_alert_state   = ALERT_NORMAL;
+RTC_DATA_ATTR uint32_t g_last_sync_s   = 0;   // unix time of last LoRa uplink
+RTC_DATA_ATTR uint8_t  g_rain_tips_rtc = 0;   // accumulated tips across sleep cycles
 ```
 
 ### Active Alert Override
@@ -260,16 +299,24 @@ When a node is in an active alert state (buzzer sounding), it does NOT deep slee
 
 ### Power Budget
 
-| State | Current | Duration | Notes |
-|---|---|---|---|
-| Deep sleep | ~10µA | ~28s | ESP32 ULP only |
-| Active (sensors + LoRa) | ~120mA | ~2s | Burst per cycle |
-| Average draw (no alert) | ~8mA | — | ~275 hours on 2200mAh |
-| Alert state (buzzer + LEDs + LoRa) | ~170mA | Continuous until cleared | Solar or battery drain |
+| State | Current | Notes |
+|---|---|---|
+| Deep sleep (all modes) | ~10µA | ESP32 ULP only |
+| Active burst (sensors + LoRa + HB100) | ~160mA | ~2s burst per 30s cycle |
+| Active burst (no HB100) | ~120mA | REDUCED/WATCHDOG mode burst |
+| Alert state (buzzer + LEDs + LoRa) | ~170mA | Continuous until cleared |
+
+**Average current by mode (2200mAh cell):**
+
+| Mode | Avg current | Runtime on 2200mAh |
+|------|-------------|-------------------|
+| ACTIVE (30s cycle, HB100) | ~11mA | ~200 hours |
+| REDUCED (5min cycle, no HB100) | ~1.3mA | ~1,700 hours |
+| WATCHDOG (30min cycle, no HB100) | ~0.25mA | ~8,800 hours |
 
 ### Solar Charging
 
-Lolin32's onboard TP4054 charges LiPo directly from the 6V 1W panel via the 5V pin. No extra charge controller needed. Solar panel connects via JST-XH 2-pin through cable gland.
+Lolin32's onboard TP4054 charges LiPo directly from the 6V 1W panel via the 5V pin. No extra charge controller needed. Solar panel connects via GX16-2P connector (weatherproof, paired, bottom panel).
 
 ### Battery Monitoring
 
@@ -311,7 +358,7 @@ IP65 ABS box, approximately 150×100×70mm.
 └─────────────────────────────┘
 ```
 
-### Cable Glands (bottom of box only)
+### GX16 Panel Connectors (bottom of box only)
 
 - Antenna SMA feedthrough (side)
 - JSN-SR04T cable
@@ -325,7 +372,7 @@ All glands on bottom — water drips down, not into the box.
 
 | Concern | Solution |
 |---|---|
-| Water ingress | Cable glands bottom-only; IP65 enclosure; mesh vent for buzzer |
+| Water ingress | GX16 panel connectors bottom-only (IP65 paired); IP65 enclosure; mesh vent for buzzer |
 | Sensor mounting | JSN-SR04T on bracket pointing down at water; HB100 mounted at 30-45° angle above canal surface, aimed along flow direction |
 | Rain gauge | DIY tipping bucket on small mast/bracket above enclosure |
 | Antenna | SMA feedthrough on side, 12dBi antenna mounted vertically above box |
@@ -344,14 +391,15 @@ Modular connector additions per node:
 | JST-XH connector sets (4 ports) | ~₱20 |
 | **Per-node addition** | **~₱20** |
 
-Updated node totals (from v3 design):
+Updated node totals (actual cart prices):
 
-| Node | v3 Price | + Connectors | New Total |
-|---|---|---|---|
-| Node A (full) | ₱1,940 | +₱20 | ₱1,960 |
-| Node B (minimal) | ₱1,401 | +₱20 | ₱1,421 |
+| Node | Total |
+|---|---|
+| Node A (full) | **₱2,456** |
+| Node B (minimal) | **₱1,478** |
 
-Grand total: ₱1,960 + ₱1,421 + ₱200 (base station) + ₱322 (shared) = **₱3,903**
+Purchased total: ₱2,456 + ₱1,478 + ₱200 (base station) + ₱322 (shared) = **₱4,456**
+Deferred: ~₱488+ (enclosures, 3D print service).
 
 ---
 

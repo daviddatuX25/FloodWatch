@@ -214,50 +214,54 @@ Clog alerts are intentionally separate from flood alert levels — they indicate
 
 | Component                       | Price      |
 |---------------------------------|------------|
-| Wemos Lolin32 v1                | ₱192       |
+| Wemos Lolin32 v1                | ₱194       |
 | 18650 2200mAh cell              | ₱165       |
 | 18650 holder 4-slot             | ₱37        |
 | SX1278 Ra-02 LoRa 433MHz        | ₱305       |
-| 12dBi antenna + SMA-uFL adapter | ₱139       |
+| 12dBi antenna + SMA-uFL adapter | ₱133       |
 | JSN-SR04T ultrasonic sensor     | ₱174       |
-| HB100 microwave Doppler radar   | ₱150       |
+| HB100 microwave Doppler radar   | ₱125       |
 | LM358 op-amp + resistors/capacitors (HB100 amplifier circuit) | ₱35 |
-| KY-003 hall sensor              | ₱20        |
+| KY-003 hall sensor + neodymium magnet | ₱99   |
 | 6V 1W solar panel               | ₱249       |
 | 2N2222A transistor              | ₱7         |
 | Dupont MF cables                | ₱37        |
-| PCB 5x7 universal board         | ₱55        |
-| Enclosure                       | ₱175       |
-| Cable glands                    | ₱30        |
+| PCB 8x12cm universal board      | ₱69        |
+| GX16-5P aviation connector (PORT-WL) | ₱77   |
+| GX16-4P aviation connector ×3 (PORT-WF, PORT-RG, spare) | ₱228 |
+| GX16-2P aviation connector (solar input) | ₱69 |
+| JST XH2.54 connector sets (2P/3P/4P/5P) | ₱57 |
 | JSN-SR04T mounting bracket      | ₱35        |
-| Tipping bucket parts (DIY)      | ₱55        |
+| Tipping bucket parts (outsourced) | ₱55      |
 | Active buzzer module (5V)       | ₱25        |
 | 5mm LED — red, yellow, blue     | ₱20        |
+| EMI copper foil tape (horn metallization) | ₱88 |
 | Current-limiting resistors      | ₱5         |
-| JST-XH connector sets (4 ports) | ₱20        |
-| **Node A total**                | **₱1,960** |
+| 1N5819 Schottky diode (solar protection) | ₱8 |
+| **Node A total**                | **₱2,456** |
+
+> Enclosure (~₱473 for L-core + S-WF module), 3D print service (horn + brackets), and foam gasket are deferred pending sizing verification. GX16 aviation connectors serve as cable glands — no separate glands needed.
 
 ### Node B — minimal configuration
 
 | Component                       | Price      |
 |---------------------------------|------------|
-| Wemos Lolin32 v1                | ₱192       |
+| Wemos Lolin32 v1                | ₱194       |
 | 18650 2200mAh cell              | ₱165       |
 | 18650 holder 4-slot             | ₱37        |
 | SX1278 Ra-02 LoRa 433MHz        | ₱305       |
-| 12dBi antenna + SMA-uFL adapter | ₱139       |
+| 12dBi antenna + SMA-uFL adapter | ₱133       |
 | JSN-SR04T ultrasonic sensor     | ₱174       |
 | 2N2222A transistor              | ₱7         |
 | Dupont MF cables                | ₱37        |
-| PCB 5x7 universal board         | ₱55        |
-| Enclosure                       | ₱175       |
-| Cable glands                    | ₱30        |
+| PCB 8x12cm universal board      | ₱69        |
+| GX16-5P aviation connector (PORT-WL) | ₱77   |
+| JST XH2.54 connector sets       | ₱46        |
 | JSN-SR04T mounting bracket      | ₱35        |
 | Active buzzer module (5V)       | ₱25        |
 | 5mm LED — red, yellow, blue     | ₱20        |
 | Current-limiting resistors      | ₱5         |
-| JST-XH connector sets (4 ports) | ₱20        |
-| **Node B total**                | **₱1,421** |
+| **Node B total**                | **₱1,478** |
 
 ### Base Station
 
@@ -279,21 +283,30 @@ Clog alerts are intentionally separate from flood alert levels — they indicate
 
 ### Grand Total
 
-| Item         | Cost       |
-|--------------|------------|
-| Node A       | ₱1,960     |
-| Node B       | ₱1,421     |
-| Base station | ₱200       |
-| Shared       | ₱322       |
-| **Total**    | **₱3,913** |
+| Item                    | Cost           |
+|-------------------------|----------------|
+| Node A                  | ₱2,456         |
+| Node B                  | ₱1,478         |
+| Base station            | ₱200           |
+| Shared / one-time       | ₱322           |
+| **Purchased Total**     | **₱4,456**     |
+| Deferred (enclosures, 3D print) | ~₱488+ |
 
-> Enclosure, bracket, fitting, and tipping bucket costs are mid-range estimates.
+> Enclosures and 3D print service fees are deferred pending physical verification of fit. GX16 aviation connectors replace cable glands — no separate gland purchase needed.
 
 ---
 
 ## XII. Power Design
 
-~15mA average draw at 30s intervals yields ~146 hours standalone on 2200mAh. Solar extends this indefinitely. Node B is battery-only, demonstrating shaded deployment viability. 2N2222A eliminates Ra-02 idle drain during sleep.
+Power is managed via adaptive sleep modes commanded by the base station over LoRa:
+
+| Mode | Cycle | HB100 | Avg current | Runtime on 2200mAh |
+|------|-------|-------|-------------|-------------------|
+| ACTIVE | 30s | YES | ~11mA | ~200 hours |
+| REDUCED | 5 min | NO | ~1.3mA | ~1,700 hours |
+| WATCHDOG | 30 min | NO | ~0.25mA | ~8,800 hours |
+
+REDUCED and WATCHDOG modes skip the HB100 Doppler radar (40mA @ 5V) — the dominant load when awake. The base station reads the 48h weather forecast and downgrades sleep mode during clear weather. Alert state always overrides to ACTIVE. Solar extends runtime indefinitely for Node A.
 
 Actuator power impact is negligible in practice. The buzzer (~30mA) and LEDs (~15mA combined) only draw during active alert states — which are rare events. Average power budget is effectively unchanged. The buzzer is also switched via 2N2222A and can be cut during deep sleep.
 
@@ -317,14 +330,31 @@ Actuator power impact is negligible in practice. The buzzer (~30mA) and LEDs (~1
 
 Validates complete pipeline across two nodes, including dual-pipeline alert architecture, actuator control via LoRa downlink, and clog detection. Each additional node costs ~₱886 bare minimum (includes buzzer + LED). Full waterway coverage requires a formal site survey to determine node spacing and count.
 
+### Deployment Modes
+
+Two deployment modes are supported by the same firmware and hardware platform:
+
+**Mode 1 — Canal Upstream Warning (original design)**
+Node A (full config) deployed along a canal. Monitors water level + surface velocity. Alerts DRRMO/barangay before overflow. Base station processes LoRa data and triggers SMS + dashboard. Requires institutional response.
+
+**Mode 2 — Road Crossing Depth Gauge**
+Node B (minimal: Lolin32 + JSN-SR04T + Ra-02) mounted above a known flood-prone road crossing, underpass, or bridge. Measures actual water depth at that exact spot. Public Firebase dashboard (no login, location-named) is the delivery mechanism. Commuters check before deciding to pass through. No institutional response needed — this is the higher-impact path for Metro Manila hotspots (EDSA corners, España underpass, etc.) where MMDA currently deploys personnel manually with marker sticks.
+
+Depth calculation:
+```
+flood_depth = dry_baseline − current_sensor_reading
+(dry_baseline = sensor height above road surface, measured once on install)
+```
+
 ### Deployment Tiers
 
 | Tier | Location | Access | Scope |
 |------|----------|--------|-------|
 | Local | Orange Pi base station | On-site (no internet required) | Single station, field team |
 | Cloud | Firebase + hosted dashboard | MDRRMO, barangay officials, public (if approved) | Multi-station view, all base stations |
+| Public depth gauge | Firebase Hosting (no login) | Public (commuters, residents) | Named road crossing, live depth |
 
-The prototype implements the local tier. Cloud multi-station view is future scope.
+The prototype implements the local tier. Mode 2 public depth gauge requires only Firebase Hosting (free tier).
 
 ---
 
