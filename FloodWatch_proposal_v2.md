@@ -203,8 +203,8 @@ Clog alerts are intentionally separate from flood alert levels — they indicate
 | Backend     | Firebase Realtime Database       | Free tier  |
 | Dashboard   | Three.js + Chart.js              | Free       |
 | Hosting     | Firebase Hosting or Vercel       | Free tier  |
-| SMS alerts  | A7680C AT+CMGS (future modular)  | Free       |
-| Data SIM    | Prepaid load                     | ~₱50/month |
+| SMS alerts  | A7670C 4G CAT.1 AT+CMGS          | ₱597 (hw)  |
+| Data SIM    | Globe GOMO — 30GB non-expiring   | ₱449/pack  |
 
 ---
 
@@ -319,7 +319,7 @@ Actuator power impact is negligible in practice. The buzzer (~30mA) and LEDs (~1
 | LoRa signal blockage | Site survey; 433MHz penetrates obstacles better than higher bands |
 | Solar shading | Node B battery-only; spare cells maintained by barangay |
 | Node submersion | Mount above flood height; IP65 enclosure |
-| WiFi unavailability | A7680C 4G modular fallback |
+| WiFi unavailability | A7670C 4G CAT.1 modular fallback (base station) |
 | LoRaMesher instability | Pre-deployment routing tests; linear relay fallback |
 | ML false positives | Cross-check with thresholds before issuing alerts |
 | Insufficient ML data | Threshold-only launch; ML activates after 2–4 weeks |
@@ -360,7 +360,7 @@ The prototype implements the local tier. Mode 2 public depth gauge requires only
 
 ## XV. Future Enhancements
 
-- A7680C 4G LTE modular integration (base station internet fallback)
+- A7670C 4G CAT.1 integration — base station internet + SMS fallback (hardware confirmed: ₱597, Globe GOMO 30GB non-expiring SIM, 1GB → 100 texts reserve)
 - Additional upstream nodes
 - Edge Impulse retraining pipeline
 - PAGASA forecast API integration
